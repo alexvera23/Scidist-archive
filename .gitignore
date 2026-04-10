@@ -1,0 +1,38 @@
+
+node_modules/
+
+# --- Datos de la Base de Datos ---
+
+
+
+data/mongo1/
+data/mongo2/
+data/mongo3/
+
+# --- Archivos Subidos (Nodos de Almacenamiento) ---
+
+
+
+data/storage1/
+data/storage2/
+services/storage-node/uploads/
+
+# --- Archivos Temporales ---
+
+
+
+services/api-gateway/temp_uploads/
+*.pdf
+*.txt
+
+# Archivos de entorno (Variables sensibles, contraseñas, URIs)
+
+.env
+*.env
+
+
+
+.DS_Store
+.vscode/
+.idea/
+npm-debug.log

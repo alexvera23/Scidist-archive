@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package storage;
+
+service StorageService {
+  // Upload: El cliente envía pedazos (chunks) de bytes y recibe confirmación
+  rpc UploadFile (stream UploadRequest) returns (UploadResponse);
+  
+  // Download: El cliente pide un hash y recibe un flujo de bytes
+  rpc DownloadFile (DownloadRequest) returns (stream DownloadResponse);
+}
+
+message UploadRequest {
+  oneof data {
+    FileInfo info = 1;
+    bytes chunk = 2;
+  }
+}
+
+message FileInfo {
+  string file_hash = 1;
+  string extension = 2;
+}
+
+message UploadResponse {
+  string file_hash = 1;
+  bool success = 2;
+  string message = 3;
+}
+
+message DownloadRequest {
+  string file_hash = 1;
+}
+
+message DownloadResponse {
+  bytes chunk = 1;
+}
