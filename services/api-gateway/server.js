@@ -129,6 +129,64 @@ app.post('/api/v1/upload', upload.single('file'), async (req, res) => {
       }
 });
 
+// NUEVO ENDPOINT: Descargar Archivo
+app.get('/api/v1/download/:hash', async (req, res) => {
+  const fileHash = req.params.hash;
+
+  try {
+    // 1. Preguntamos al Metadata Service dónde está el archivo
+    const metadataUrl = `http://metadata-service:3001/api/v1/articles/${fileHash}`;
+    const metadataResponse = await axios.get(metadataUrl);
+    const { title, node_id } = metadataResponse.data;
+
+    // Buscamos la IP del nodo en nuestra lista de "Service Discovery"
+    const targetNode = STORAGE_NODES.find(n => n.id === node_id);
+    if (!targetNode) {
+      return res.status(500).json({ error: 'El nodo que tiene el archivo está fuera de línea' });
+    }
+
+    console.log(`[Gateway]  Descargando "${title}" (${fileHash}) desde ${targetNode.id}`);
+
+    // 2. Conectamos al nodo por gRPC
+    const client = new storageProto.StorageService(
+      targetNode.address,
+      grpc.credentials.createInsecure()
+    );
+
+    const call = client.DownloadFile({ file_hash: fileHash });
+
+    // 3. Preparamos la respuesta HTTP para el navegador del usuario
+    res.setHeader('Content-Disposition', `attachment; filename="${title}"`);
+    res.setHeader('Content-Type', 'application/octet-stream');
+
+    // 4. Puenteamos el stream gRPC directo al stream HTTP (Súper eficiente en RAM)
+    call.on('data', (response) => {
+      res.write(response.chunk);
+    });
+
+    call.on('end', () => {
+      res.end(); // Terminamos la petición HTTP
+      console.log(`[Gateway]  Archivo entregado al cliente con éxito`);
+    });
+
+    call.on('error', (err) => {
+      console.error('[Gateway]  Error gRPC en descarga:', err.message);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Error obteniendo el archivo del nodo' });
+      } else {
+        res.end();
+      }
+    });
+
+  } catch (error) {
+    if (error.response && error.response.status === 404) {
+      return res.status(404).json({ error: 'El archivo no existe en el sistema distribuido' });
+    }
+    console.error('[Gateway] Error interno:', error.message);
+    res.status(500).json({ error: 'Error interno del Gateway' });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(` API Gateway escuchando en puerto ${PORT}`);

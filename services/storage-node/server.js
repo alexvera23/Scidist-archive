@@ -3,60 +3,35 @@ const protoLoader = require('@grpc/proto-loader');
 const fs = require('fs-extra');
 const path = require('path');
 
-// En Docker, el volumen se montará en /app/proto
-const PROTO_PATH = path.join(__dirname, 'proto', 'storage.proto'); 
-const UPLOADS_DIR = path.join(__dirname, 'uploads')
+const PROTO_PATH = path.join(__dirname, 'proto', 'storage.proto');
+const UPLOADS_DIR = path.join(__dirname, 'uploads');
 
-// Asegurarse de que el directorio de subidas exista
 fs.ensureDirSync(UPLOADS_DIR);
 
-// Cargar el contrato gRPC
 const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
-  keepCase: true,
-  longs: String,
-  enums: String,
-  defaults: true,
-  oneofs: true
+  keepCase: true, longs: String, enums: String, defaults: true, oneofs: true
 });
 const storageProto = grpc.loadPackageDefinition(packageDefinition).storage;
 
-/**
- * Implementación del servicio UploadFile
- * Utiliza Streams de gRPC para recibir archivos en fragmentos (chunks)
- */
 function uploadFile(call, callback) {
   let fileStream = null;
   let currentFileHash = '';
 
-  // Escuchar cuando llegan datos (chunks)
   call.on('data', (payload) => {
-    // Si el payload contiene 'info', es el primer mensaje
     if (payload.info) {
       currentFileHash = payload.info.file_hash;
       const extension = payload.info.extension || '.pdf';
       const filePath = path.join(UPLOADS_DIR, `${currentFileHash}${extension}`);
-      
-      // Abrir el stream de escritura en el disco
       fileStream = fs.createWriteStream(filePath);
       console.log(`[Storage]  Iniciando recepción: ${currentFileHash}`);
-    } 
-    // Si el payload contiene 'chunk', son los bytes del archivo
-    else if (payload.chunk) {
-      if (fileStream) {
-        fileStream.write(payload.chunk);
-      }
+    } else if (payload.chunk) {
+      if (fileStream) fileStream.write(payload.chunk);
     }
   });
 
-  // Cuando el Gateway avisa que terminó de enviar el archivo
   call.on('end', () => {
-    if (fileStream) {
-      fileStream.end(); // Cerrar el archivo
-    }
-    
+    if (fileStream) fileStream.end();
     console.log(`[Storage]  Archivo ${currentFileHash} guardado exitosamente.`);
-    
-    // Responder al Gateway que todo salió bien
     callback(null, {
       file_hash: currentFileHash,
       success: true,
@@ -64,17 +39,53 @@ function uploadFile(call, callback) {
     });
   });
 
-  // Si ocurre un error de red o en la escritura
   call.on('error', (err) => {
     console.error(`[Storage]  Error recibiendo archivo:`, err);
     if (fileStream) fileStream.end();
   });
 }
 
+// NUEVA FUNCIÓN: Descargar Archivo por Hash
+function downloadFile(call) {
+  const fileHash = call.request.file_hash;
+  console.log(`[Storage] 📤 Solicitud de descarga para: ${fileHash}`);
+
+  // Buscamos cualquier archivo que empiece con este hash (sin importar la extensión)
+  const files = fs.readdirSync(UPLOADS_DIR);
+  const targetFile = files.find(f => f.startsWith(fileHash));
+
+  if (!targetFile) {
+    console.error(`[Storage]  Archivo ${fileHash} no encontrado físicamente`);
+    return call.emit('error', { code: grpc.status.NOT_FOUND, details: 'Archivo no encontrado' });
+  }
+
+  const filePath = path.join(UPLOADS_DIR, targetFile);
+  
+  // Creamos un stream de lectura (pedacitos de 64KB)
+  const readStream = fs.createReadStream(filePath, { highWaterMark: 1024 * 64 });
+
+  // Cada vez que leemos un pedazo del disco, lo enviamos por gRPC
+  readStream.on('data', (chunk) => {
+    call.write({ chunk: chunk });
+  });
+
+  readStream.on('end', () => {
+    console.log(`[Storage]  Descarga gRPC completada para: ${fileHash}`);
+    call.end(); // Avisar que terminamos
+  });
+
+  readStream.on('error', (err) => {
+    console.error(`[Storage]  Error leyendo archivo:`, err);
+    call.emit('error', { code: grpc.status.INTERNAL, details: 'Error leyendo disco' });
+  });
+}
+
 function main() {
   const server = new grpc.Server();
+  // AQUÍ REGISTRAMOS LA NUEVA FUNCIÓN
   server.addService(storageProto.StorageService.service, { 
-    uploadFile: uploadFile 
+    uploadFile: uploadFile,
+    downloadFile: downloadFile 
   });
   
   const port = process.env.PORT || '50051';
