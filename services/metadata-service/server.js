@@ -12,14 +12,11 @@ const MONGO_URI = process.env.MONGO_URI;
 mongoose.connect(MONGO_URI)
   .then(async () => {
     console.log(' Conectado al Replica Set de MongoDB');
-    
-    // SOLUCIÓN: Crear colecciones explícitamente para permitir transacciones
     try {
       await Article.createCollection();
       await StorageMap.createCollection();
       console.log(' Colecciones inicializadas y listas para transacciones');
     } catch (err) {
-      // Ignoramos el error si la colección ya existe (NamespaceExists)
       if (err.code !== 48) console.error('Error creando colecciones:', err);
     }
   })
@@ -27,6 +24,28 @@ mongoose.connect(MONGO_URI)
 
 app.get('/health', (req, res) => {
   res.json({ status: 'Metadata Service is running', db: mongoose.connection.readyState });
+});
+
+// NUEVO: Consultar dónde está un archivo y su nombre original
+app.get('/api/v1/articles/:hash', async (req, res) => {
+  try {
+    const file_hash = req.params.hash;
+    // Buscamos la info lógica (nombre) y la física (nodo)
+    const article = await Article.findOne({ file_hash });
+    const storage = await StorageMap.findOne({ file_hash, status: 'synced' });
+
+    if (!article || !storage) {
+      return res.status(404).json({ error: 'Archivo no encontrado en la red' });
+    }
+
+    res.status(200).json({
+      title: article.title,
+      node_id: storage.node_id
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error consultando la base de datos' });
+  }
 });
 
 app.post('/api/v1/articles', async (req, res) => {
@@ -40,20 +59,10 @@ app.post('/api/v1/articles', async (req, res) => {
   session.startTransaction();
 
   try {
-    const newArticle = new Article({
-      file_hash,
-      title,
-      status: 'available'
-    });
-    // Pasamos el array con un elemento para usar la sintaxis correcta en transacciones de mongoose
+    const newArticle = new Article({ file_hash, title, status: 'available' });
     const savedArticle = await Article.create([newArticle], { session });
 
-    const newStorageMap = new StorageMap({
-      file_hash,
-      node_id,
-      is_primary: true,
-      status: 'synced'
-    });
+    const newStorageMap = new StorageMap({ file_hash, node_id, is_primary: true, status: 'synced' });
     await StorageMap.create([newStorageMap], { session });
 
     await session.commitTransaction();
