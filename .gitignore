@@ -24,7 +24,10 @@ services/storage-node/uploads/
 services/api-gateway/temp_uploads/
 *.pdf
 *.txt
-
+*.mkv
+*.jpeg
+*.jpg
+*.png
 # Archivos de entorno (Variables sensibles, contraseñas, URIs)
 
 .env
