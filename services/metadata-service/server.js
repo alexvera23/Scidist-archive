@@ -12,21 +12,21 @@ const MONGO_URI = process.env.MONGO_URI;
 
 mongoose.connect(MONGO_URI)
   .then(async () => {
-    console.log('✅ Conectado al Replica Set de MongoDB');
+    console.log(' Conectado al Replica Set de MongoDB');
     try {
       await Article.createCollection();
       await StorageMap.createCollection();
       await ReplicationTask.createCollection();
       await NodeHealth.createCollection();
-      console.log('✅ Todas las colecciones inicializadas');
+      console.log(' Todas las colecciones inicializadas');
     } catch (err) {
-      if (err.code !== 48) console.error('❌ Error creando colecciones:', err);
+      if (err.code !== 48) console.error(' Error creando colecciones:', err);
     }
   })
-  .catch(err => console.error('❌ Error de conexión Mongo:', err));
+  .catch(err => console.error(' Error de conexión Mongo:', err));
 
 // ==========================================
-// 💓 SERVIDOR UDP (HEARTBEATS)
+//  SERVIDOR UDP (HEARTBEATS)
 // ==========================================
 const udpServer = dgram.createSocket('udp4');
 
@@ -34,7 +34,7 @@ udpServer.on('message', async (msg, rinfo) => {
   try {
     const data = JSON.parse(msg);
     // LOG CHISMOSO: Imprimimos cada vez que llega un latido
-    console.log(`[UDP] 💓 Latido de ${data.node_id} desde ${rinfo.address}`);
+    console.log(`[UDP]  Latido de ${data.node_id} desde ${rinfo.address}`);
     
     if (data.node_id) {
       await NodeHealth.findOneAndUpdate(
@@ -44,17 +44,17 @@ udpServer.on('message', async (msg, rinfo) => {
       );
     }
   } catch (e) {
-    console.error('❌ [UDP] Error al guardar el latido en DB:', e.message);
+    console.error(' [UDP] Error al guardar el latido en DB:', e.message);
   }
 });
 
 udpServer.on('error', (err) => {
-  console.error(`❌ [UDP] Error crítico en el servidor: ${err.message}`);
+  console.error(` [UDP] Error crítico en el servidor: ${err.message}`);
 });
 
 // Forzamos a que escuche en todas las interfaces de red (0.0.0.0)
 udpServer.bind(3002, '0.0.0.0', () => {
-  console.log('💓 Servidor UDP escuchando latidos en 0.0.0.0:3002');
+  console.log(' Servidor UDP escuchando latidos en 0.0.0.0:3002');
 });
 
 // Vigilante (Watchdog)
@@ -66,10 +66,10 @@ setInterval(async () => {
       { $set: { status: 'down' } }
     );
     if (res.modifiedCount > 0) {
-      console.log(`[Vigilante] ⚠️ Se marcaron ${res.modifiedCount} nodos como DOWN`);
+      console.log(`[Vigilante]  Se marcaron ${res.modifiedCount} nodos como DOWN`);
     }
   } catch (e) {
-    console.error('❌ [Vigilante] Error:', e.message);
+    console.error(' [Vigilante] Error:', e.message);
   }
 }, 10000);
 
@@ -127,13 +127,13 @@ app.post('/api/v1/articles', async (req, res) => {
 
     await session.commitTransaction();
     session.endSession();
-    console.log(`[Metadata] ✅ Transacción EXITOSA para: ${file_hash}`);
+    console.log(`[Metadata]  Transacción EXITOSA para: ${file_hash}`);
     res.status(201).json({ message: 'Registrado con éxito', article_id: newArticle._id });
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
     // AQUÍ ESTÁ LA MAGIA: Esto nos dirá EXACTAMENTE qué falló
-    console.error('❌ [Metadata] ERROR EN LA TRANSACCIÓN:', error);
+    console.error(' [Metadata] ERROR EN LA TRANSACCIÓN:', error);
     res.status(500).json({ error: 'Error en transacción', details: error.message });
   }
 });
@@ -164,4 +164,4 @@ app.post('/api/v1/replication-tasks/complete', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`🚀 Metadata Service escuchando en puerto ${PORT}`));
+app.listen(PORT, () => console.log(` Metadata Service escuchando en puerto ${PORT}`));

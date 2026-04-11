@@ -58,7 +58,7 @@ function uploadFile(call, callback) {
 // NUEVA FUNCIÓN: Descargar Archivo por Hash
 function downloadFile(call) {
   const fileHash = call.request.file_hash;
-  console.log(`[Storage] 📤 Solicitud de descarga para: ${fileHash}`);
+  console.log(`[Storage]  Solicitud de descarga para: ${fileHash}`);
 
   // Buscamos cualquier archivo que empiece con este hash (sin importar la extensión)
   const files = fs.readdirSync(UPLOADS_DIR);
