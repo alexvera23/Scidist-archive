@@ -48,8 +48,9 @@ app.get('/api/v1/articles/:hash', async (req, res) => {
   }
 });
 
+// MODIFICAR: Crear artículo y programar tarea de replicación
 app.post('/api/v1/articles', async (req, res) => {
-  const { file_hash, title, node_id } = req.body;
+  const { file_hash, title, node_id, replica_node_id } = req.body; // Recibimos la réplica
 
   if (!file_hash || !title || !node_id) {
     return res.status(400).json({ error: 'Faltan campos requeridos' });
@@ -65,17 +66,64 @@ app.post('/api/v1/articles', async (req, res) => {
     const newStorageMap = new StorageMap({ file_hash, node_id, is_primary: true, status: 'synced' });
     await StorageMap.create([newStorageMap], { session });
 
+    // NUEVO: Si hay un nodo de réplica, creamos la tarea asíncrona
+    if (replica_node_id && replica_node_id !== node_id) {
+      const { ReplicationTask } = require('./models');
+      const task = new ReplicationTask({
+        file_hash,
+        source_node: node_id,
+        target_node: replica_node_id,
+        status: 'pending'
+      });
+      await ReplicationTask.create([task], { session });
+    }
+
     await session.commitTransaction();
     session.endSession();
-
-    console.log(`[Metadata]  Metadatos registrados para: ${file_hash}`);
-    res.status(201).json({ message: 'Metadatos registrados con éxito', article_id: savedArticle[0]._id });
-
+    res.status(201).json({ message: 'Registrado con éxito', article_id: savedArticle[0]._id });
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
-    console.error('[Metadata]  Error en la transacción:', error);
-    res.status(500).json({ error: 'Error al registrar metadatos en la base de datos' });
+    res.status(500).json({ error: 'Error en transacción' });
+  }
+});
+
+// NUEVO: Endpoint para que un nodo pida sus tareas pendientes
+app.get('/api/v1/replication-tasks/:node_id', async (req, res) => {
+  const { ReplicationTask } = require('./models');
+  try {
+    const tasks = await ReplicationTask.find({ 
+      source_node: req.params.node_id, 
+      status: 'pending' 
+    }).limit(5); // Procesamos de 5 en 5 para no saturar
+    res.json(tasks);
+  } catch (error) {
+    res.status(500).json({ error: 'Error buscando tareas' });
+  }
+});
+
+// NUEVO: Endpoint para que un nodo confirme que terminó la copia
+app.post('/api/v1/replication-tasks/complete', async (req, res) => {
+  const { task_id, file_hash, target_node } = req.body;
+  const { ReplicationTask } = require('./models');
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    // Marcamos la tarea como terminada
+    await ReplicationTask.findByIdAndUpdate(task_id, { status: 'done' }, { session });
+    
+    // Registramos que el nodo secundario ya tiene el archivo
+    const newStorageMap = new StorageMap({ file_hash, node_id: target_node, is_primary: false, status: 'synced' });
+    await StorageMap.create([newStorageMap], { session });
+
+    await session.commitTransaction();
+    session.endSession();
+    res.json({ message: 'Replicación completada y registrada' });
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    res.status(500).json({ error: 'Error confirmando replicación' });
   }
 });
 

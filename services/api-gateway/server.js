@@ -28,14 +28,19 @@ const STORAGE_NODES = [
 ];
 
 /**
- * Lógica Básica de Hash Consistente
- * Convierte el hash del archivo en un número y usa el módulo para elegir el nodo.
+ * Lógica de Anillo (Ring Logic)
+ * Elige un nodo primario y su vecino como nodo de réplica.
  */
-function getTargetNode(fileHash) {
-  // Convertimos los primeros 8 caracteres del hash hexadecimal a entero
+function getRoutingNodes(fileHash) {
   const hashInt = parseInt(fileHash.substring(0, 8), 16);
-  const nodeIndex = hashInt % STORAGE_NODES.length;
-  return STORAGE_NODES[nodeIndex];
+  const primaryIndex = hashInt % STORAGE_NODES.length;
+  // El vecino en el anillo (si es el último, vuelve al primero)
+  const replicaIndex = (primaryIndex + 1) % STORAGE_NODES.length; 
+  
+  return {
+    primary: STORAGE_NODES[primaryIndex],
+    replica: STORAGE_NODES[replicaIndex]
+  };
 }
 
 // 3. Endpoint Principal de Subida
@@ -57,9 +62,9 @@ app.post('/api/v1/upload', upload.single('file'), async (req, res) => {
 
     console.log(`[Gateway] Archivo recibido: ${originalName} -> Hash: ${fileHash}`);
 
-    // B. Elegir el nodo de almacenamiento (Hash Consistente)
-    const targetNode = getTargetNode(fileHash);
-    console.log(`[Gateway] Nodo seleccionado: ${targetNode.id}`);
+    // B. Elegir el nodo primario y la réplica
+    const { primary: targetNode, replica: replicaNode } = getRoutingNodes(fileHash);
+    console.log(`[Gateway] Nodo Primario: ${targetNode.id} | Nodo Réplica: ${replicaNode.id}`);
 
     // C. Enviar el archivo vía gRPC
     // C. Enviar el archivo vía gRPC
@@ -85,7 +90,8 @@ app.post('/api/v1/upload', upload.single('file'), async (req, res) => {
         const metadataPayload = {
           file_hash: fileHash,
           title: originalName,
-          node_id: targetNode.id
+          node_id: targetNode.id,
+          replica_node_id: replicaNode.id // ¡Añadimos la réplica aquí!
         };
 
         // Hacemos un POST a la red interna de Docker (puerto 3001 del metadata-service)
