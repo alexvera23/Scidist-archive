@@ -108,15 +108,21 @@ async function processReplicationTasks() {
     if (tasks.length === 0) return; // Nada que hacer
 
     console.log(`[P2P Worker]  Encontradas ${tasks.length} tareas de replicación.`);
+    
 
     for (const task of tasks) {
       console.log(`[P2P Worker]  Replicando ${task.file_hash} hacia ${task.target_node}`);
       
-      const filePath = path.join(UPLOADS_DIR, `${task.file_hash}.pdf`); // Asumimos PDF por ahora
+      const filePath = path.join(UPLOADS_DIR, `${task.file_hash}.pdf`); // Asumimos PDF por ahora, ELIMINAR linea si queremos replicar cualquier tipo de archivos
+      // const files = fs.readdirSync(UPLOADS_DIR);
+      // const targetFile = files.find(f=> f.startsWith(task.file_hash)); Descomentar en caso de replicar cualquier tipo de archivos
       if (!fs.existsSync(filePath)) {
         console.error(`[const filePP2P Worker] Archivo no encontrado en disco: ${filePath}`);
         continue; // Pasamos a la siguiente tarea
       }
+      // Descomentar en caso de replicar cualquier tipo de archivos
+      // const filePath = path.join(UPLOADS_DIR, targetFile);
+      // const fileExtension = path.extname(targetFile);
 
       // 2. Nos conectamos al nodo vecino como si fuéramos un cliente (Gateway)
       const targetAddress = `${task.target_node}:50051`;
