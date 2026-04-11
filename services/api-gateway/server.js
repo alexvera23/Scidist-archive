@@ -24,22 +24,23 @@ const upload = multer({ dest: 'temp_uploads/' });
 // Lista de nodos de almacenamiento disponibles (Simulando Service Discovery)
 const STORAGE_NODES = [
   { id: 'storage-node-1', address: 'storage-node-1:50051' },
-  { id: 'storage-node-2', address: 'storage-node-2:50051' }
+  { id: 'storage-node-2', address: 'storage-node-2:50051' },
+  { id: 'storage-node-3', address: 'storage-node-3:50051' } // NUEVO NODO
 ];
 
 /**
- * Lógica de Anillo (Ring Logic)
- * Elige un nodo primario y su vecino como nodo de réplica.
+ * Lógica de Anillo (Ring Logic) para Factor de Replicación 3
  */
 function getRoutingNodes(fileHash) {
   const hashInt = parseInt(fileHash.substring(0, 8), 16);
   const primaryIndex = hashInt % STORAGE_NODES.length;
-  // El vecino en el anillo (si es el último, vuelve al primero)
-  const replicaIndex = (primaryIndex + 1) % STORAGE_NODES.length; 
+  // Los dos siguientes nodos en el anillo son las réplicas
+  const replica1Index = (primaryIndex + 1) % STORAGE_NODES.length; 
+  const replica2Index = (primaryIndex + 2) % STORAGE_NODES.length; 
   
   return {
     primary: STORAGE_NODES[primaryIndex],
-    replica: STORAGE_NODES[replicaIndex]
+    replicas: [STORAGE_NODES[replica1Index], STORAGE_NODES[replica2Index]]
   };
 }
 
@@ -63,7 +64,7 @@ app.post('/api/v1/upload', upload.single('file'), async (req, res) => {
     console.log(`[Gateway] Archivo recibido: ${originalName} -> Hash: ${fileHash}`);
 
     // B. Elegir el nodo primario y la réplica
-    const { primary: targetNode, replica: replicaNode } = getRoutingNodes(fileHash);
+    const { primary: targetNode, replicas: replicaNode } = getRoutingNodes(fileHash);
     console.log(`[Gateway] Nodo Primario: ${targetNode.id} | Nodo Réplica: ${replicaNode.id}`);
 
     // C. Enviar el archivo vía gRPC
@@ -91,7 +92,7 @@ app.post('/api/v1/upload', upload.single('file'), async (req, res) => {
           file_hash: fileHash,
           title: originalName,
           node_id: targetNode.id,
-          replica_node_id: replicaNode.id // ¡Añadimos la réplica aquí!
+          replicas: replicaNode.map(n=> n.id) // ¡Añadimos las dos réplicas aquí!
         };
 
         // Hacemos un POST a la red interna de Docker (puerto 3001 del metadata-service)
@@ -126,12 +127,10 @@ app.post('/api/v1/upload', upload.single('file'), async (req, res) => {
     // Avisamos que terminamos de enviar
     call.end();
 
-  } catch (metadataError) {
-        // Mejoramos el log para ver el error real de Axios
-        const errorDetails = metadataError.response ? metadataError.response.data : metadataError.message;
-        console.error('[Gateway]  Error al contactar Metadata Service:', errorDetails);
-        
-        res.status(500).json({ error: 'El archivo se guardó pero falló el registro de base de datos' });
+  } catch (error) {
+      const errorDetails = error.response ? error.response.data : error.message;
+      console.error('[Gateway] Error interno en upload:', errorDetails);
+      res.status(500).json({ error: 'Error interno del Gateway' });
       }
 });
 

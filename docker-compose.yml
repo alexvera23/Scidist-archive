@@ -78,6 +78,20 @@ services:
     networks:
       - scidist-net
 
+  storage-node-3:
+    build:
+      context: ./services/storage-node # <-- CAMBIO AQUÍ
+      dockerfile: Dockerfile
+    container_name: storage-node-3
+    environment:
+      - NODE_ID=storage-node-3
+      - PORT=50051
+    volumes:
+      - ./data/storage3:/app/uploads:Z
+      - ./proto:/app/proto:ro
+    networks:
+      - scidist-net
+      
   api-gateway:
     build: 
       context: ./services/api-gateway

@@ -9,6 +9,12 @@ const UPLOADS_DIR = path.join(__dirname, 'uploads');
 const axios = require('axios');
 const METADATA_URL = 'http://metadata-service:3001/api/v1';
 const MY_NODE_ID = process.env.NODE_ID || 'local';
+const dgram = require('dgram');
+const { json } = require('stream/consumers');
+const { timeStamp } = require('console');
+const udpClient = dgram.createSocket('udp4');
+const METADATA_UDP_PORT = 3002;
+const METADATA_HOST = 'metadata-service'
 
 fs.ensureDirSync(UPLOADS_DIR);
 
@@ -159,6 +165,20 @@ async function processReplicationTasks() {
   }
 }
 
+//Estado de salud de los nodos 
+function sendHearbeat(){
+  const payload = Buffer.from(JSON.stringify({
+    node_id: MY_NODE_ID,
+    status: 'up',
+    timestamp: Date.now()   // también corregido: era timeStamp (inconsistente con lo que lee el servidor UDP)
+  }));
+
+  udpClient.send(payload, 0, payload.length, METADATA_UDP_PORT, METADATA_HOST, (err) => {
+    if (err) console.error(`[Heartbeat] Error enviando latido:`, err.message);
+  });
+}
+
+setInterval(sendHearbeat, 5000);
 // Arrancar el worker 5 segundos después de que inicie el nodo, y luego cada 15 segundos
 setTimeout(() => {
   console.log(`[P2P Worker]  Iniciando vigilante de replicación en ${MY_NODE_ID}`);
