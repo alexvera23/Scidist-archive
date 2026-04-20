@@ -1,25 +1,44 @@
 const mongoose = require('mongoose');
 
-// 1. Esquema de Usuarios
+
+//  MODELOS DE IDENTIDAD Y CLASIFICACIÓN
+
+
+// 1. Usuarios (Propietarios de los archivos y temas)
 const UserSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
-  email: { type: String, required: true },
-  password: { type: String, required: true },
-  role: { type: String, enum: ['admin', 'scientist'], default: 'scientist' }
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true }
 }, { timestamps: true });
 
-// 2. Esquema de Artículos
+// 2. Temas (Nivel 1 de clasificación, propios de cada usuario)
+const ThemeSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  owner_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }
+});
+
+// 3. Subtemas (Nivel 2 de clasificación, pertenecen a un Tema y a un Usuario)
+const SubthemeSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  parent_theme_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Theme', required: true },
+  owner_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }
+});
+
+// 4. Artículos (Actualizado para ser privado y tener tema/subtema)
 const ArticleSchema = new mongoose.Schema({
-  owner_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   file_hash: { type: String, required: true, index: true },
   title: String,
-  authors: [String],
-  abstract: String,
-  category_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Category' },
-  status: { type: String, enum: ['uploading', 'processing', 'available', 'error'], default: 'uploading' }
+  owner_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }, // ¡El dueño!
+  theme_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Theme' },       // Clasificación Nivel 1
+  subtheme_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Subtheme' }, // Clasificación Nivel 2 (Opcional)
+  status: { type: String, enum: ['uploading', 'available', 'deleted', 'error'], default: 'available' }
 }, { timestamps: true });
 
-// 3. Mapa de Almacenamiento
+
+// ⚙️ MODELOS DEL SISTEMA P2P (INTACTOS)
+
+
+// Mapa de Almacenamiento
 const StorageMapSchema = new mongoose.Schema({
   file_hash: { type: String, required: true, index: true },
   node_id: { type: String, required: true },
@@ -28,7 +47,7 @@ const StorageMapSchema = new mongoose.Schema({
   status: { type: String, enum: ['synced', 'error'], default: 'synced' }
 });
 
-// 4. Tareas de Replicación
+// Tareas de Replicación
 const ReplicationTaskSchema = new mongoose.Schema({
   file_hash: { type: String, required: true },
   source_node: String,
@@ -37,24 +56,18 @@ const ReplicationTaskSchema = new mongoose.Schema({
   retry_count: { type: Number, default: 0 }
 }, { timestamps: true });
 
-// 5. Categoría (Aquí estaba el error)
-const CategorySchema = new mongoose.Schema({ 
-  name: String, 
-  description: String 
-});
-
-// 6. Salud del Nodo
+// Salud de los Nodos
 const NodeHealthSchema = new mongoose.Schema({
-  node_id: String,
-  status: String,
-  last_heartbeat: Date,
-  stats: { free_space: Number, load_avg: Number }
+  node_id: { type: String, required: true, index: true },
+  status: { type: String, enum: ['up', 'down'] },
+  last_heartbeat: Date
 });
 
 module.exports = {
   User: mongoose.model('User', UserSchema),
+  Theme: mongoose.model('Theme', ThemeSchema),
+  Subtheme: mongoose.model('Subtheme', SubthemeSchema),
   Article: mongoose.model('Article', ArticleSchema),
-  Category: mongoose.model('Category', CategorySchema), // ¡Corregido!
   StorageMap: mongoose.model('StorageMap', StorageMapSchema),
   ReplicationTask: mongoose.model('ReplicationTask', ReplicationTaskSchema),
   NodeHealth: mongoose.model('NodeHealth', NodeHealthSchema)

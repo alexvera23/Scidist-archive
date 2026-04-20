@@ -3,7 +3,8 @@ const mongoose = require('mongoose');
 const dgram = require('dgram');
 require('dotenv').config();
 
-const { Article, StorageMap, NodeHealth, ReplicationTask } = require('./models');
+// Importamos nuestros nuevos modelos
+const { User, Theme, Subtheme, Article, StorageMap, NodeHealth, ReplicationTask } = require('./models');
 
 const app = express();
 app.use(express.json());
@@ -14,28 +15,74 @@ mongoose.connect(MONGO_URI)
   .then(async () => {
     console.log(' Conectado al Replica Set de MongoDB');
     try {
+      // INICIALIZACIÓN DE TODAS LAS COLECCIONES (Para evitar la Trampa de Transacciones)
+      await User.createCollection();
+      await Theme.createCollection();
+      await Subtheme.createCollection();
       await Article.createCollection();
       await StorageMap.createCollection();
       await ReplicationTask.createCollection();
       await NodeHealth.createCollection();
-      console.log(' Todas las colecciones inicializadas');
+      console.log(' Colecciones Multi-Tenant inicializadas');
     } catch (err) {
       if (err.code !== 48) console.error(' Error creando colecciones:', err);
     }
   })
   .catch(err => console.error(' Error de conexión Mongo:', err));
 
-// ==========================================
+
+//  RUTA DE PRUEBA: Generar Usuario y Temas
+
+app.post('/api/v1/setup-test-user', async (req, res) => {
+  try {
+    // 1. Crear usuario de prueba
+    const testUser = new User({
+      username: `cientifico_${Date.now()}`, // Nombre único
+      email: `test_${Date.now()}@scidist.com`,
+      password: 'hashed_password_placeholder'
+    });
+    await testUser.save();
+
+    // 2. Crear Temas (General y Redes)
+    const themeGeneral = new Theme({ name: 'General', owner_id: testUser._id });
+    const themeRedes = new Theme({ name: 'Redes', owner_id: testUser._id });
+    await themeGeneral.save();
+    await themeRedes.save();
+
+    // 3. Crear Subtemas (Protocolos y Topologías, pertenecientes a Redes)
+    const subProtocolos = new Subtheme({ name: 'Protocolos', parent_theme_id: themeRedes._id, owner_id: testUser._id });
+    const subTopologias = new Subtheme({ name: 'Topologias', parent_theme_id: themeRedes._id, owner_id: testUser._id });
+    await subProtocolos.save();
+    await subTopologias.save();
+
+    console.log(`[Setup] Usuario de prueba creado: ${testUser._id}`);
+    res.status(201).json({
+      message: 'Entorno de prueba creado',
+      user_id: testUser._id,
+      themes: {
+        general_id: themeGeneral._id,
+        redes_id: themeRedes._id
+      },
+      subthemes: {
+        protocolos_id: subProtocolos._id,
+        topologias_id: subTopologias._id
+      }
+    });
+
+  } catch (error) {
+    console.error('Error en setup:', error);
+    res.status(500).json({ error: 'Fallo al crear entorno de prueba' });
+  }
+});
+
+
 //  SERVIDOR UDP (HEARTBEATS)
-// ==========================================
+
 const udpServer = dgram.createSocket('udp4');
 
 udpServer.on('message', async (msg, rinfo) => {
   try {
     const data = JSON.parse(msg);
-    // LOG CHISMOSO: Imprimimos cada vez que llega un latido
-    console.log(`[UDP]  Latido de ${data.node_id} desde ${rinfo.address}`);
-    
     if (data.node_id) {
       await NodeHealth.findOneAndUpdate(
         { node_id: data.node_id },
@@ -43,47 +90,41 @@ udpServer.on('message', async (msg, rinfo) => {
         { upsert: true, new: true }
       );
     }
-  } catch (e) {
-    console.error(' [UDP] Error al guardar el latido en DB:', e.message);
-  }
+  } catch (e) {}
 });
 
-udpServer.on('error', (err) => {
-  console.error(` [UDP] Error crítico en el servidor: ${err.message}`);
-});
+udpServer.on('error', (err) => console.error(` [UDP] Error crítico: ${err.message}`));
+udpServer.bind(3002, '0.0.0.0', () => console.log(' Servidor UDP escuchando en 0.0.0.0:3002'));
 
-// Forzamos a que escuche en todas las interfaces de red (0.0.0.0)
-udpServer.bind(3002, '0.0.0.0', () => {
-  console.log(' Servidor UDP escuchando latidos en 0.0.0.0:3002');
-});
-
-// Vigilante (Watchdog)
 setInterval(async () => {
   try {
     const threshold = new Date(Date.now() - 15000);
-    const res = await NodeHealth.updateMany(
+    await NodeHealth.updateMany(
       { last_heartbeat: { $lt: threshold }, status: 'up' },
       { $set: { status: 'down' } }
     );
-    if (res.modifiedCount > 0) {
-      console.log(`[Vigilante]  Se marcaron ${res.modifiedCount} nodos como DOWN`);
-    }
-  } catch (e) {
-    console.error(' [Vigilante] Error:', e.message);
-  }
+  } catch (e) {}
 }, 10000);
 
-// ==========================================
-// ENDPOINTS HTTP
-// ==========================================
 
+// ENDPOINTS HTTP (ACTUALIZADOS CON OWNER_ID)
+
+
+// Consulta Inteligente para Descarga (Ahora requiere saber QUIÉN es el dueño)
 app.get('/api/v1/articles/:hash', async (req, res) => {
   try {
     const file_hash = req.params.hash;
-    const article = await Article.findOne({ file_hash });
-    const storages = await StorageMap.find({ file_hash, status: 'synced' });
+    const { owner_id } = req.query; // Nuevo: El gateway nos pasará quién lo pide
 
-    if (!article || storages.length === 0) return res.status(404).json({ error: 'No encontrado' });
+    if (!owner_id) return res.status(400).json({ error: 'Falta owner_id' });
+
+    // Filtrar para que solo encuentre el artículo si le pertenece a este usuario
+    const article = await Article.findOne({ file_hash, owner_id });
+    
+    if (!article) return res.status(404).json({ error: 'No encontrado o no tienes permisos' });
+
+    const storages = await StorageMap.find({ file_hash, status: 'synced' });
+    if (storages.length === 0) return res.status(404).json({ error: 'Físicamente no encontrado' });
 
     const activeNodes = await NodeHealth.find({ status: 'up' }).select('node_id');
     const activeNodeIds = activeNodes.map(n => n.node_id);
@@ -98,17 +139,39 @@ app.get('/api/v1/articles/:hash', async (req, res) => {
   }
 });
 
+// NUEVO: Obtener todas las categorías de un usuario
+app.get('/api/v1/users/:id/categories', async (req, res) => {
+  try {
+    const owner_id = req.params.id;
+    const themes = await Theme.find({ owner_id });
+    const subthemes = await Subtheme.find({ owner_id });
+    res.json({ themes, subthemes });
+  } catch (error) {
+    res.status(500).json({ error: 'Error obteniendo categorías' });
+  }
+});
+
+// Guardar Metadatos del Artículo (Actualizado con Temas)
 app.post('/api/v1/articles', async (req, res) => {
-  const { file_hash, title, node_id, replicas } = req.body; 
+  // Ahora esperamos el owner_id y los temas desde el Gateway
+  const { file_hash, title, owner_id, theme_id, subtheme_id, node_id, replicas } = req.body; 
+
+  if (!file_hash || !title || !owner_id || !node_id) {
+    return res.status(400).json({ error: 'Faltan campos obligatorios' });
+  }
 
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
-    console.log(`[Metadata] Iniciando transacción para: ${file_hash}`);
-    
-    // Usamos .save({ session }) que es más seguro que .create([]) para Mongoose
-    const newArticle = new Article({ file_hash, title, status: 'available' });
+    const newArticle = new Article({ 
+      file_hash, 
+      title, 
+      owner_id, 
+      theme_id, 
+      subtheme_id, 
+      status: 'available' 
+    });
     await newArticle.save({ session });
 
     const newStorageMap = new StorageMap({ file_hash, node_id, is_primary: true, status: 'synced' });
@@ -116,28 +179,22 @@ app.post('/api/v1/articles', async (req, res) => {
 
     if (replicas && replicas.length > 0) {
       const tasks = replicas.map(replica_id => ({
-        file_hash,
-        source_node: node_id,
-        target_node: replica_id,
-        status: 'pending'
+        file_hash, source_node: node_id, target_node: replica_id, status: 'pending'
       }));
-      // insertMany es la forma correcta de guardar arrays en transacciones
       await ReplicationTask.insertMany(tasks, { session });
     }
 
     await session.commitTransaction();
     session.endSession();
-    console.log(`[Metadata]  Transacción EXITOSA para: ${file_hash}`);
     res.status(201).json({ message: 'Registrado con éxito', article_id: newArticle._id });
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
-    // AQUÍ ESTÁ LA MAGIA: Esto nos dirá EXACTAMENTE qué falló
-    console.error(' [Metadata] ERROR EN LA TRANSACCIÓN:', error);
-    res.status(500).json({ error: 'Error en transacción', details: error.message });
+    res.status(500).json({ error: 'Error en transacción' });
   }
 });
 
+// ... (Los endpoints de ReplicationTask y app.listen() siguen igual)
 app.get('/api/v1/replication-tasks/:node_id', async (req, res) => {
   try {
     const tasks = await ReplicationTask.find({ source_node: req.params.node_id, status: 'pending' }).limit(5);

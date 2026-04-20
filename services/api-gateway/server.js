@@ -6,6 +6,7 @@ const grpc = require('@grpc/grpc-js');
 const protoLoader = require('@grpc/proto-loader');
 const path = require('path');
 const fs = require('fs');
+const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js'); // Usamos legacy para evitar problemas con Node 18
 
 const app = express();
 app.use(express.json());
@@ -44,155 +45,204 @@ function getRoutingNodes(fileHash) {
   };
 }
 
-// 3. Endpoint Principal de Subida
+// ==========================================
+// ENDPOINT: SUBIR ARCHIVO CON INTELIGENCIA ARTIFICIAL
+// ==========================================
 app.post('/api/v1/upload', upload.single('file'), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'No se envió ningún archivo' });
+  const userId = req.headers['x-user-id'];
+  if (!userId) {
+    if (req.file) fs.unlinkSync(req.file.path);
+    return res.status(401).json({ error: 'Falta la cabecera x-user-id' });
   }
+  if (!req.file) return res.status(400).json({ error: 'No se envió ningún archivo' });
 
   const tempPath = req.file.path;
   const originalName = req.file.originalname;
-  const extension = path.extname(originalName);
+  const extension = path.extname(originalName).toLowerCase();
 
   try {
-    // A. Calcular el Hash SHA-256 del archivo
     const fileBuffer = fs.readFileSync(tempPath);
+    
+    // 1. Calcular Hash
     const hashSum = crypto.createHash('sha256');
     hashSum.update(fileBuffer);
     const fileHash = hashSum.digest('hex');
 
-    console.log(`[Gateway] Archivo recibido: ${originalName} -> Hash: ${fileHash}`);
+    // 2. EXTRAER TEXTO PARA LA IA
+    let extractedText = "";
+    try {
+      if (extension === '.pdf') {
+        const uint8Array = new Uint8Array(fileBuffer);
+        const loadingTask = pdfjsLib.getDocument({ data: uint8Array });
+        const pdfDocument = await loadingTask.promise;
+        
+        // Solo leer las primeras 3 páginas para no saturar la memoria
+        const numPages = Math.min(3, pdfDocument.numPages); 
+        let fullText = "";
 
-    // B. Elegir el nodo primario y la réplica
-    const { primary: targetNode, replicas: replicaNode } = getRoutingNodes(fileHash);
-    console.log(`[Gateway] Nodo Primario: ${targetNode.id} | Nodo Réplica: ${replicaNode.id}`);
+        for (let i = 1; i <= numPages; i++) {
+          const page = await pdfDocument.getPage(i);
+          const textContent = await page.getTextContent();
+          const pageText = textContent.items.map(item => item.str).join(' ');
+          fullText += pageText + " ";
+        }
+        
+        // Limpiamos un poco el texto y lo cortamos
+        extractedText = fullText.replace(/\s+/g, ' ').substring(0, 1500);
+      } else if (extension === '.txt') {
+        extractedText = fileBuffer.toString('utf-8').substring(0, 1500);
+      }
+    } catch (parseError) {
+      console.error('[Gateway]  Advertencia: No se pudo extraer texto para la IA:', parseError.message);
+      // No rompemos el flujo. Si no hay texto, irá a la categoría "General"
+    }
 
-    // C. Enviar el archivo vía gRPC
-    // C. Enviar el archivo vía gRPC
-    const client = new storageProto.StorageService(
-      targetNode.address,
-      grpc.credentials.createInsecure()
-    );
+    // 3. OBTENER CATEGORÍAS DEL USUARIO
+    let candidateLabels = [];
+    let categoryMap = {}; // Para saber qué ID corresponde a cada nombre
+    let generalThemeId = null;
 
-    // Iniciamos el stream gRPC
+    try {
+      const catResponse = await axios.get(`http://metadata-service:3001/api/v1/users/${userId}/categories`);
+      const { themes, subthemes } = catResponse.data;
+
+      // Mapear Temas (Buscamos "General" como respaldo)
+      themes.forEach(t => {
+        if (t.name.toLowerCase() === 'general') {
+          generalThemeId = t._id;
+        } else {
+          candidateLabels.push(t.name);
+          categoryMap[t.name] = { theme_id: t._id, subtheme_id: null };
+        }
+      });
+
+      // Mapear Subtemas
+      subthemes.forEach(st => {
+        candidateLabels.push(st.name);
+        categoryMap[st.name] = { theme_id: st.parent_theme_id, subtheme_id: st._id };
+      });
+    } catch (catError) {
+      console.error('[Gateway] Error obteniendo categorías:', catError.message);
+    }
+
+    // 4. CLASIFICACIÓN CON INTELIGENCIA ARTIFICIAL
+    let finalThemeId = generalThemeId; 
+    let finalSubthemeId = null;
+
+    if (extractedText.trim().length > 20 && candidateLabels.length > 0) {
+      try {
+        console.log(`[Gateway] Enviando texto a IA. Etiquetas candidatas:`, candidateLabels);
+        const aiResponse = await axios.post('http://classifier-service:8000/classify', {
+          text: extractedText,
+          candidate_labels: candidateLabels
+        });
+
+        const { best_label, confidence } = aiResponse.data;
+        console.log(`[IA] Resultado: ${best_label} (Confianza: ${(confidence*100).toFixed(1)}%)`);
+
+        // Si la IA está más del 30% segura, asignamos esa categoría. Si no, va a "General".
+        if (confidence > 0.3) {
+          finalThemeId = categoryMap[best_label].theme_id;
+          finalSubthemeId = categoryMap[best_label].subtheme_id;
+        } else {
+          console.log(`[IA] Confianza baja. Asignando a 'General'`);
+        }
+      } catch (aiError) {
+        console.error('[Gateway] Error en Clasificador IA:', aiError.message);
+      }
+    } else {
+      console.log(`[Gateway] Texto muy corto o sin categorías. Asignando a 'General'`);
+    }
+
+    // 5. ENRUTAMIENTO P2P Y TRANSFERENCIA gRPC
+    const { primary: targetNode, replicas: replicaNodes } = getRoutingNodes(fileHash);
+    const client = new storageProto.StorageService(targetNode.address, grpc.credentials.createInsecure());
+
     const call = client.UploadFile(async (error, response) => {
-      // Esta función se ejecuta cuando el Storage Node responde
-      fs.unlinkSync(tempPath); // Borrar el archivo temporal del Gateway
+      fs.unlinkSync(tempPath); 
       
       if (error) {
-        console.error('[Gateway] Error gRPC:', error);
         return res.status(500).json({ error: 'Error al transferir al nodo de almacenamiento' });
       }
 
-      console.log(`[Gateway] Archivo guardado físicamente en: ${targetNode.id}`);
-
-      // D. NUEVO: Llamar al Metadata Service
+      // 6. GUARDAR EN BASE DE DATOS DISTRIBUIDA
       try {
         const metadataPayload = {
           file_hash: fileHash,
           title: originalName,
+          owner_id: userId,          
+          theme_id: finalThemeId,        // Categoría decidida por la IA
+          subtheme_id: finalSubthemeId,  // Subcategoría decidida por la IA
           node_id: targetNode.id,
-          replicas: replicaNode.map(n=> n.id) // ¡Añadimos las dos réplicas aquí!
+          replicas: replicaNodes.map(n => n.id) 
         };
 
-        // Hacemos un POST a la red interna de Docker (puerto 3001 del metadata-service)
         const metadataResponse = await axios.post('http://metadata-service:3001/api/v1/articles', metadataPayload);
         
-        console.log('[Gateway] Metadatos confirmados en MongoDB');
-
         res.status(200).json({
-          message: 'Archivo subido, distribuido y registrado con éxito',
+          message: 'Archivo analizado por IA, distribuido y registrado',
           file_hash: fileHash,
-          target_node: targetNode.id,
-          metadata_id: metadataResponse.data.article_id
+          classification: {
+            assigned_theme_id: finalThemeId,
+            assigned_subtheme_id: finalSubthemeId
+          }
         });
 
       } catch (metadataError) {
-        console.error('[Gateway]  Error al contactar Metadata Service:', metadataError.message);
-        // NOTA DISTRIBUIDA: Aquí aplicaríamos un "Saga Pattern" para decirle al 
-        // storage-node que borre el archivo porque la base de datos falló.
-        res.status(500).json({ error: 'El archivo se guardó pero falló el registro de base de datos' });
+        res.status(500).json({ error: 'Fallo el registro en base de datos' });
       }
     });
 
-    // Enviamos el primer mensaje con los metadatos
-    call.write({
-      info: { file_hash: fileHash, extension: extension }
-    });
-
-    // Enviamos los chunks del archivo (Simulado enviando todo de una vez por ahora para simplificar)
-    // En un sistema real de producción, se leería el archivo como stream
+    call.write({ info: { file_hash: fileHash, extension: extension } });
     call.write({ chunk: fileBuffer });
-    
-    // Avisamos que terminamos de enviar
     call.end();
 
   } catch (error) {
-      const errorDetails = error.response ? error.response.data : error.message;
-      console.error('[Gateway] Error interno en upload:', errorDetails);
-      res.status(500).json({ error: 'Error interno del Gateway' });
-      }
-});
-
-// NUEVO ENDPOINT: Descargar Archivo
-app.get('/api/v1/download/:hash', async (req, res) => {
-  const fileHash = req.params.hash;
-
-  try {
-    // 1. Preguntamos al Metadata Service dónde está el archivo
-    const metadataUrl = `http://metadata-service:3001/api/v1/articles/${fileHash}`;
-    const metadataResponse = await axios.get(metadataUrl);
-    const { title, node_id } = metadataResponse.data;
-
-    // Buscamos la IP del nodo en nuestra lista de "Service Discovery"
-    const targetNode = STORAGE_NODES.find(n => n.id === node_id);
-    if (!targetNode) {
-      return res.status(500).json({ error: 'El nodo que tiene el archivo está fuera de línea' });
-    }
-
-    console.log(`[Gateway]  Descargando "${title}" (${fileHash}) desde ${targetNode.id}`);
-
-    // 2. Conectamos al nodo por gRPC
-    const client = new storageProto.StorageService(
-      targetNode.address,
-      grpc.credentials.createInsecure()
-    );
-
-    const call = client.DownloadFile({ file_hash: fileHash });
-
-    // 3. Preparamos la respuesta HTTP para el navegador del usuario
-    res.setHeader('Content-Disposition', `attachment; filename="${title}"`);
-    res.setHeader('Content-Type', 'application/octet-stream');
-
-    // 4. Puenteamos el stream gRPC directo al stream HTTP (Súper eficiente en RAM)
-    call.on('data', (response) => {
-      res.write(response.chunk);
-    });
-
-    call.on('end', () => {
-      res.end(); // Terminamos la petición HTTP
-      console.log(`[Gateway]  Archivo entregado al cliente con éxito`);
-    });
-
-    call.on('error', (err) => {
-      console.error('[Gateway]  Error gRPC en descarga:', err.message);
-      if (!res.headersSent) {
-        res.status(500).json({ error: 'Error obteniendo el archivo del nodo' });
-      } else {
-        res.end();
-      }
-    });
-
-  } catch (error) {
-    if (error.response && error.response.status === 404) {
-      return res.status(404).json({ error: 'El archivo no existe en el sistema distribuido' });
-    }
-    console.error('[Gateway] Error interno:', error.message);
+    if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
     res.status(500).json({ error: 'Error interno del Gateway' });
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(` API Gateway escuchando en puerto ${PORT}`);
+// ==========================================
+// ENDPOINT: DESCARGAR ARCHIVO (Filtra por Usuario)
+// ==========================================
+app.get('/api/v1/download/:hash', async (req, res) => {
+  const fileHash = req.params.hash;
+  const userId = req.headers['x-user-id'];
+
+  if (!userId) {
+    return res.status(401).json({ error: 'Falta la cabecera x-user-id' });
+  }
+
+  try {
+    // Le pasamos el owner_id en la Query String al Metadata Service
+    const metadataUrl = `http://metadata-service:3001/api/v1/articles/${fileHash}?owner_id=${userId}`;
+    const metadataResponse = await axios.get(metadataUrl);
+    const { title, node_id } = metadataResponse.data;
+
+    const targetNode = STORAGE_NODES.find(n => n.id === node_id);
+    if (!targetNode) return res.status(500).json({ error: 'Nodo fuera de línea' });
+
+    const client = new storageProto.StorageService(targetNode.address, grpc.credentials.createInsecure());
+    const call = client.DownloadFile({ file_hash: fileHash });
+
+    res.setHeader('Content-Disposition', `attachment; filename="${title}"`);
+    res.setHeader('Content-Type', 'application/octet-stream');
+
+    call.on('data', (response) => res.write(response.chunk));
+    call.on('end', () => res.end());
+    call.on('error', (err) => {
+      if (!res.headersSent) res.status(500).json({ error: 'Error gRPC' });
+      else res.end();
+    });
+
+  } catch (error) {
+    if (error.response && error.response.status === 404) {
+      return res.status(404).json({ error: 'El archivo no existe o no te pertenece' });
+    }
+    res.status(500).json({ error: 'Error interno' });
+  }
 });
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`🚀 API Gateway escuchando en puerto ${PORT}`));
