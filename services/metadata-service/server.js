@@ -13,7 +13,7 @@ const MONGO_URI = process.env.MONGO_URI;
 
 mongoose.connect(MONGO_URI)
   .then(async () => {
-    console.log('✅ Conectado al Replica Set de MongoDB');
+    console.log(' Conectado al Replica Set de MongoDB');
     try {
       // INICIALIZACIÓN DE TODAS LAS COLECCIONES (Para evitar la Trampa de Transacciones)
       await User.createCollection();
@@ -23,16 +23,16 @@ mongoose.connect(MONGO_URI)
       await StorageMap.createCollection();
       await ReplicationTask.createCollection();
       await NodeHealth.createCollection();
-      console.log('✅ Colecciones Multi-Tenant inicializadas');
+      console.log(' Colecciones Multi-Tenant inicializadas');
     } catch (err) {
-      if (err.code !== 48) console.error('❌ Error creando colecciones:', err);
+      if (err.code !== 48) console.error(' Error creando colecciones:', err);
     }
   })
-  .catch(err => console.error('❌ Error de conexión Mongo:', err));
+  .catch(err => console.error(' Error de conexión Mongo:', err));
 
-// ==========================================
-// 🛠️ RUTA DE PRUEBA: Generar Usuario y Temas
-// ==========================================
+
+//  RUTA DE PRUEBA: Generar Usuario y Temas
+
 app.post('/api/v1/setup-test-user', async (req, res) => {
   try {
     // 1. Crear usuario de prueba
@@ -75,9 +75,9 @@ app.post('/api/v1/setup-test-user', async (req, res) => {
   }
 });
 
-// ==========================================
-// 💓 SERVIDOR UDP (HEARTBEATS)
-// ==========================================
+
+//  SERVIDOR UDP (HEARTBEATS)
+
 const udpServer = dgram.createSocket('udp4');
 
 udpServer.on('message', async (msg, rinfo) => {
@@ -93,8 +93,8 @@ udpServer.on('message', async (msg, rinfo) => {
   } catch (e) {}
 });
 
-udpServer.on('error', (err) => console.error(`❌ [UDP] Error crítico: ${err.message}`));
-udpServer.bind(3002, '0.0.0.0', () => console.log('💓 Servidor UDP escuchando en 0.0.0.0:3002'));
+udpServer.on('error', (err) => console.error(` [UDP] Error crítico: ${err.message}`));
+udpServer.bind(3002, '0.0.0.0', () => console.log(' Servidor UDP escuchando en 0.0.0.0:3002'));
 
 setInterval(async () => {
   try {
@@ -106,9 +106,9 @@ setInterval(async () => {
   } catch (e) {}
 }, 10000);
 
-// ==========================================
+
 // ENDPOINTS HTTP (ACTUALIZADOS CON OWNER_ID)
-// ==========================================
+
 
 // Consulta Inteligente para Descarga (Ahora requiere saber QUIÉN es el dueño)
 app.get('/api/v1/articles/:hash', async (req, res) => {
@@ -136,6 +136,18 @@ app.get('/api/v1/articles/:hash', async (req, res) => {
     res.status(200).json({ title: article.title, node_id: chosenNode.node_id, is_replica: !chosenNode.is_primary });
   } catch (error) {
     res.status(500).json({ error: 'Error BD' });
+  }
+});
+
+// NUEVO: Obtener todas las categorías de un usuario
+app.get('/api/v1/users/:id/categories', async (req, res) => {
+  try {
+    const owner_id = req.params.id;
+    const themes = await Theme.find({ owner_id });
+    const subthemes = await Subtheme.find({ owner_id });
+    res.json({ themes, subthemes });
+  } catch (error) {
+    res.status(500).json({ error: 'Error obteniendo categorías' });
   }
 });
 
@@ -209,4 +221,4 @@ app.post('/api/v1/replication-tasks/complete', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`🚀 Metadata Service escuchando en puerto ${PORT}`));
+app.listen(PORT, () => console.log(` Metadata Service escuchando en puerto ${PORT}`));
