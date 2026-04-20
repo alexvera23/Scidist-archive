@@ -107,6 +107,20 @@ services:
       - storage-node-1
       - storage-node-2
       - metadata-service
+  
+  classifier-service:
+    build: 
+      context: ./services/classifier-service
+      dockerfile: Dockerfile
+    container_name: classifier-service
+    ports:
+      - "8000:8000" # Lo exponemos para probarlo localmente
+    networks:
+      - scidist-net
+    deploy:
+      resources:
+        limits:
+          memory: 3G # Evita que Hugging Face consuma toda la RAM
 
 
 networks:
