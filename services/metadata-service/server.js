@@ -4,7 +4,7 @@ const dgram = require('dgram');
 require('dotenv').config();
 
 // Importamos nuestros nuevos modelos
-const { User, Theme, Subtheme, Article, StorageMap, NodeHealth, ReplicationTask } = require('./models');
+const { User, Theme, Subtheme, Article, StorageMap, NodeHealth, ReplicationTask, ActiveNode } = require('./models');
 
 const app = express();
 app.use(express.json());

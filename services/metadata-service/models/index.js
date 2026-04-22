@@ -35,7 +35,7 @@ const ArticleSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 
-// ⚙️ MODELOS DEL SISTEMA P2P (INTACTOS)
+//  MODELOS DEL SISTEMA P2P (INTACTOS)
 
 
 // Mapa de Almacenamiento
@@ -63,6 +63,14 @@ const NodeHealthSchema = new mongoose.Schema({
   last_heartbeat: Date
 });
 
+//Nuevo modelo Para el directorio de los nodos 
+
+const ActiveNodeSchema = new mongoose.Schema({
+  node_id: { type: String, required: true, unique: true },
+  address: { type: String, required: true }, // Ejemplo: "192.168.1.15:50051"
+  last_seen: { type: Date, default: Date.now }
+});
+
 module.exports = {
   User: mongoose.model('User', UserSchema),
   Theme: mongoose.model('Theme', ThemeSchema),
@@ -70,5 +78,7 @@ module.exports = {
   Article: mongoose.model('Article', ArticleSchema),
   StorageMap: mongoose.model('StorageMap', StorageMapSchema),
   ReplicationTask: mongoose.model('ReplicationTask', ReplicationTaskSchema),
-  NodeHealth: mongoose.model('NodeHealth', NodeHealthSchema)
+  NodeHealth: mongoose.model('NodeHealth', NodeHealthSchema),
+  ActiveNode: mongoose.model('ActiveNode',ActiveNodeSchema)
+
 };
