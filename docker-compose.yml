@@ -115,7 +115,8 @@ services:
       - ./data/storage5:/app/uploads:Z
       - ./proto:/app/proto:ro
     networks:
-      - scidist-net      
+      - scidist-net     
+ 
   api-gateway:
     build: 
       context: ./services/api-gateway
