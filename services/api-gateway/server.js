@@ -100,9 +100,9 @@ app.post('/api/v1/upload', upload.single('file'), async (req, res) => {
         }
         
         // Limpiamos un poco el texto y lo cortamos
-        extractedText = fullText.replace(/\s+/g, ' ').substring(0, 1500);
+        extractedText = fullText.replace(/\s+/g, ' ').substring(0, 2500);
       } else if (extension === '.txt') {
-        extractedText = fileBuffer.toString('utf-8').substring(0, 1500);
+        extractedText = fileBuffer.toString('utf-8').substring(0, 2500);
       }
     } catch (parseError) {
       console.error('[Gateway]  Advertencia: No se pudo extraer texto para la IA:', parseError.message);
@@ -137,33 +137,51 @@ app.post('/api/v1/upload', upload.single('file'), async (req, res) => {
       console.error('[Gateway] Error obteniendo categorías:', catError.message);
     }
 
-    // 4. CLASIFICACIÓN CON INTELIGENCIA ARTIFICIAL
+    // 4. VALIDACIÓN Y CLASIFICACIÓN CON IA
     let finalThemeId = generalThemeId; 
     let finalSubthemeId = null;
 
-    if (extractedText.trim().length > 20 && candidateLabels.length > 0) {
+    if (extractedText.trim().length > 50 && candidateLabels.length > 0) {
       try {
-        console.log(`[Gateway] Enviando texto a IA. Etiquetas candidatas:`, candidateLabels);
+        // --- PASO A: VALIDACIÓN IMRyD ---
+        console.log(`[Gateway] Validando estructura científica (IMRyD)...`);
+        const validationLabels = ["artículo científico (IMRyD)", "documento genérico", "publicidad o spam"];
+        
+        const validationResponse = await axios.post('http://classifier-service:8000/classify', {
+          text: extractedText,
+          candidate_labels: validationLabels
+        });
+
+        const isValid = validationResponse.data.best_label === "artículo científico (IMRyD)";
+        const validationConfidence = validationResponse.data.confidence;
+
+        if (!isValid || validationConfidence < 0.4) {
+          console.log(`[Gateway]  Archivo rechazado: No parece un artículo científico (${(validationConfidence*100).toFixed(1)}%)`);
+          fs.unlinkSync(tempPath);
+          return res.status(400).json({ 
+            error: "El archivo no cumple con la estructura de un artículo científico (IMRyD)." 
+          });
+        }
+
+        console.log(`[Gateway]  Estructura validada con ${(validationConfidence*100).toFixed(1)}% de confianza.`);
+
+        // --- PASO B: CLASIFICACIÓN TEMÁTICA (Solo si pasó el paso A) ---
         const aiResponse = await axios.post('http://classifier-service:8000/classify', {
           text: extractedText,
           candidate_labels: candidateLabels
         });
 
         const { best_label, confidence } = aiResponse.data;
-        console.log(`[IA] Resultado: ${best_label} (Confianza: ${(confidence*100).toFixed(1)}%)`);
-
-        // Si la IA está más del 30% segura, asignamos esa categoría. Si no, va a "General".
         if (confidence > 0.3) {
           finalThemeId = categoryMap[best_label].theme_id;
           finalSubthemeId = categoryMap[best_label].subtheme_id;
-        } else {
-          console.log(`[IA] Confianza baja. Asignando a 'General'`);
+          console.log(`[IA] Clasificado en: ${best_label} (${(confidence*100).toFixed(1)}%)`);
         }
+
       } catch (aiError) {
-        console.error('[Gateway] Error en Clasificador IA:', aiError.message);
+        console.error('[Gateway] Error en validación IA:', aiError.message);
+        // En caso de error de la IA, podemos ser conservadores y mandarlo a General
       }
-    } else {
-      console.log(`[Gateway] Texto muy corto o sin categorías. Asignando a 'General'`);
     }
 
     // 5. CONSULTA DINÁMICA DE NODOS ACTIVOS
