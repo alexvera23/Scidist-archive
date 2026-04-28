@@ -91,7 +91,32 @@ services:
       - ./proto:/app/proto:ro
     networks:
       - scidist-net
-      
+  
+  storage-node-4:
+    build: ./services/storage-node
+    container_name: storage-node-4
+    environment:
+      - NODE_ID=storage-node-4
+      - PORT=50051
+    volumes:
+      - ./data/storage4:/app/uploads:Z
+      - ./proto:/app/proto:ro
+    networks:
+      - scidist-net
+
+
+  storage-node-5:
+    build: ./services/storage-node
+    container_name: storage-node-5
+    environment:
+      - NODE_ID=storage-node-5
+      - PORT=50051
+    volumes:
+      - ./data/storage5:/app/uploads:Z
+      - ./proto:/app/proto:ro
+    networks:
+      - scidist-net     
+ 
   api-gateway:
     build: 
       context: ./services/api-gateway

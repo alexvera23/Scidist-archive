@@ -4,7 +4,7 @@ const dgram = require('dgram');
 require('dotenv').config();
 
 // Importamos nuestros nuevos modelos
-const { User, Theme, Subtheme, Article, StorageMap, NodeHealth, ReplicationTask } = require('./models');
+const { User, Theme, Subtheme, Article, StorageMap, NodeHealth, ReplicationTask, ActiveNode } = require('./models');
 
 const app = express();
 app.use(express.json());
@@ -23,6 +23,7 @@ mongoose.connect(MONGO_URI)
       await StorageMap.createCollection();
       await ReplicationTask.createCollection();
       await NodeHealth.createCollection();
+      await ActiveNode.createCollection();
       console.log(' Colecciones Multi-Tenant inicializadas');
     } catch (err) {
       if (err.code !== 48) console.error(' Error creando colecciones:', err);
@@ -217,6 +218,32 @@ app.post('/api/v1/replication-tasks/complete', async (req, res) => {
     await session.abortTransaction();
     session.endSession();
     res.status(500).json({ error: 'Error' });
+  }
+});
+
+// 1. Registro de Nodo (Llamado por los Storage Nodes al arrancar)
+app.post('/api/v1/nodes/register', async (req, res) => {
+  const { node_id, address } = req.body;
+  try {
+    await ActiveNode.findOneAndUpdate(
+      { node_id },
+      { address, last_seen: new Date() },
+      { upsert: true }
+    );
+    console.log(`[Registry] Nodo registrado: ${node_id} en ${address}`);
+    res.status(200).json({ message: 'Registrado correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al registrar nodo' });
+  }
+});
+
+// 2. Listar Nodos (Llamado por el Gateway y por otros nodos para replicación)
+app.get('/api/v1/nodes', async (req, res) => {
+  try {
+    const nodes = await ActiveNode.find();
+    res.json(nodes);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener nodos' });
   }
 });
 

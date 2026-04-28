@@ -23,25 +23,37 @@ const storageProto = grpc.loadPackageDefinition(packageDefinition).storage;
 const upload = multer({ dest: 'temp_uploads/' });
 
 // Lista de nodos de almacenamiento disponibles (Simulando Service Discovery)
-const STORAGE_NODES = [
-  { id: 'storage-node-1', address: 'storage-node-1:50051' },
-  { id: 'storage-node-2', address: 'storage-node-2:50051' },
-  { id: 'storage-node-3', address: 'storage-node-3:50051' } // NUEVO NODO
-];
-
+// const STORAGE_NODES = [
+//   { id: 'storage-node-1', address: 'storage-node-1:50051' },
+//   { id: 'storage-node-2', address: 'storage-node-2:50051' },
+//   { id: 'storage-node-3', address: 'storage-node-3:50051' } // NUEVO NODO
+// ];
+// Función para obtener nodos frescos desde el Metadata Service
+async function fetchActiveNodes() {
+  try {
+    const response = await axios.get('http://metadata-service:3001/api/v1/nodes');
+    return response.data; // Retorna [{node_id, address}, ...]
+  } catch (error) {
+    console.error('[Gateway] No se pudo obtener la lista de nodos');
+    return [];
+  }
+}
 /**
  * Lógica de Anillo (Ring Logic) para Factor de Replicación 3
  */
-function getRoutingNodes(fileHash) {
+function getRoutingNodes(fileHash, activeNodes) {
+  if (activeNodes.length === 0) return null;
+  
   const hashInt = parseInt(fileHash.substring(0, 8), 16);
-  const primaryIndex = hashInt % STORAGE_NODES.length;
-  // Los dos siguientes nodos en el anillo son las réplicas
-  const replica1Index = (primaryIndex + 1) % STORAGE_NODES.length; 
-  const replica2Index = (primaryIndex + 2) % STORAGE_NODES.length; 
+  const primaryIndex = hashInt % activeNodes.length;
+  
+  // Replicación a los siguientes nodos disponibles
+  const replica1Index = (primaryIndex + 1) % activeNodes.length;
+  const replica2Index = (primaryIndex + 2) % activeNodes.length;
   
   return {
-    primary: STORAGE_NODES[primaryIndex],
-    replicas: [STORAGE_NODES[replica1Index], STORAGE_NODES[replica2Index]]
+    primary: activeNodes[primaryIndex],
+    replicas: [activeNodes[replica1Index], activeNodes[replica2Index]]
   };
 }
 
@@ -88,9 +100,9 @@ app.post('/api/v1/upload', upload.single('file'), async (req, res) => {
         }
         
         // Limpiamos un poco el texto y lo cortamos
-        extractedText = fullText.replace(/\s+/g, ' ').substring(0, 1500);
+        extractedText = fullText.replace(/\s+/g, ' ').substring(0, 2500);
       } else if (extension === '.txt') {
-        extractedText = fileBuffer.toString('utf-8').substring(0, 1500);
+        extractedText = fileBuffer.toString('utf-8').substring(0, 2500);
       }
     } catch (parseError) {
       console.error('[Gateway]  Advertencia: No se pudo extraer texto para la IA:', parseError.message);
@@ -125,37 +137,62 @@ app.post('/api/v1/upload', upload.single('file'), async (req, res) => {
       console.error('[Gateway] Error obteniendo categorías:', catError.message);
     }
 
-    // 4. CLASIFICACIÓN CON INTELIGENCIA ARTIFICIAL
+    // 4. VALIDACIÓN Y CLASIFICACIÓN CON IA
     let finalThemeId = generalThemeId; 
     let finalSubthemeId = null;
 
-    if (extractedText.trim().length > 20 && candidateLabels.length > 0) {
+    if (extractedText.trim().length > 50 && candidateLabels.length > 0) {
       try {
-        console.log(`[Gateway] Enviando texto a IA. Etiquetas candidatas:`, candidateLabels);
+        // --- PASO A: VALIDACIÓN IMRyD ---
+        console.log(`[Gateway] Validando estructura científica (IMRyD)...`);
+        const validationLabels = ["artículo científico (IMRyD)", "documento genérico", "publicidad o spam"];
+        
+        const validationResponse = await axios.post('http://classifier-service:8000/classify', {
+          text: extractedText,
+          candidate_labels: validationLabels
+        });
+
+        const isValid = validationResponse.data.best_label === "artículo científico (IMRyD)";
+        const validationConfidence = validationResponse.data.confidence;
+
+        if (!isValid || validationConfidence < 0.4) {
+          console.log(`[Gateway]  Archivo rechazado: No parece un artículo científico (${(validationConfidence*100).toFixed(1)}%)`);
+          fs.unlinkSync(tempPath);
+          return res.status(400).json({ 
+            error: "El archivo no cumple con la estructura de un artículo científico (IMRyD)." 
+          });
+        }
+
+        console.log(`[Gateway]  Estructura validada con ${(validationConfidence*100).toFixed(1)}% de confianza.`);
+
+        // --- PASO B: CLASIFICACIÓN TEMÁTICA (Solo si pasó el paso A) ---
         const aiResponse = await axios.post('http://classifier-service:8000/classify', {
           text: extractedText,
           candidate_labels: candidateLabels
         });
 
         const { best_label, confidence } = aiResponse.data;
-        console.log(`[IA] Resultado: ${best_label} (Confianza: ${(confidence*100).toFixed(1)}%)`);
-
-        // Si la IA está más del 30% segura, asignamos esa categoría. Si no, va a "General".
         if (confidence > 0.3) {
           finalThemeId = categoryMap[best_label].theme_id;
           finalSubthemeId = categoryMap[best_label].subtheme_id;
-        } else {
-          console.log(`[IA] Confianza baja. Asignando a 'General'`);
+          console.log(`[IA] Clasificado en: ${best_label} (${(confidence*100).toFixed(1)}%)`);
         }
+
       } catch (aiError) {
-        console.error('[Gateway] Error en Clasificador IA:', aiError.message);
+        console.error('[Gateway] Error en validación IA:', aiError.message);
+        // En caso de error de la IA, podemos ser conservadores y mandarlo a General
       }
-    } else {
-      console.log(`[Gateway] Texto muy corto o sin categorías. Asignando a 'General'`);
     }
 
-    // 5. ENRUTAMIENTO P2P Y TRANSFERENCIA gRPC
-    const { primary: targetNode, replicas: replicaNodes } = getRoutingNodes(fileHash);
+    // 5. CONSULTA DINÁMICA DE NODOS ACTIVOS
+    const activeNodes = await fetchActiveNodes();
+    if (activeNodes.length === 0) {
+      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+      return res.status(503).json({ error: 'No hay nodos de almacenamiento disponibles en la red' });
+    }
+
+    // 6. ENRUTAMIENTO P2P Y TRANSFERENCIA gRPC
+    const { primary: targetNode, replicas: replicaNodes } = getRoutingNodes(fileHash, activeNodes);
     const client = new storageProto.StorageService(targetNode.address, grpc.credentials.createInsecure());
 
     const call = client.UploadFile(async (error, response) => {
@@ -165,7 +202,7 @@ app.post('/api/v1/upload', upload.single('file'), async (req, res) => {
         return res.status(500).json({ error: 'Error al transferir al nodo de almacenamiento' });
       }
 
-      // 6. GUARDAR EN BASE DE DATOS DISTRIBUIDA
+      // 7. GUARDAR EN BASE DE DATOS DISTRIBUIDA
       try {
         const metadataPayload = {
           file_hash: fileHash,
@@ -173,8 +210,8 @@ app.post('/api/v1/upload', upload.single('file'), async (req, res) => {
           owner_id: userId,          
           theme_id: finalThemeId,        // Categoría decidida por la IA
           subtheme_id: finalSubthemeId,  // Subcategoría decidida por la IA
-          node_id: targetNode.id,
-          replicas: replicaNodes.map(n => n.id) 
+          node_id: targetNode.node_id,
+          replicas: replicaNodes.map(n => n.node_id) 
         };
 
         const metadataResponse = await axios.post('http://metadata-service:3001/api/v1/articles', metadataPayload);
@@ -215,14 +252,22 @@ app.get('/api/v1/download/:hash', async (req, res) => {
   }
 
   try {
-    // Le pasamos el owner_id en la Query String al Metadata Service
+    // 1. CONSULTA DINÁMICA PARA LOCALIZAR EL NODO
+    const activeNodes = await fetchActiveNodes();
+    if (activeNodes.length === 0) {
+      return res.status(503).json({ error: 'No hay nodos de almacenamiento disponibles en la red' });
+    }
+
+    // 2. OBTENER METADATOS DEL ARCHIVO
     const metadataUrl = `http://metadata-service:3001/api/v1/articles/${fileHash}?owner_id=${userId}`;
     const metadataResponse = await axios.get(metadataUrl);
     const { title, node_id } = metadataResponse.data;
 
-    const targetNode = STORAGE_NODES.find(n => n.id === node_id);
-    if (!targetNode) return res.status(500).json({ error: 'Nodo fuera de línea' });
+    // 3. BUSCAR EL NODO ACTIVO QUE CONTIENE EL ARCHIVO
+    const targetNode = activeNodes.find(n => n.node_id === node_id);
+    if (!targetNode) return res.status(503).json({ error: 'El nodo que contiene el archivo no está accesible actualmente' });
 
+    // 4. CONEXIÓN gRPC AL NODO ENCONTRADO DINÁMICAMENTE
     const client = new storageProto.StorageService(targetNode.address, grpc.credentials.createInsecure());
     const call = client.DownloadFile({ file_hash: fileHash });
 
@@ -245,4 +290,4 @@ app.get('/api/v1/download/:hash', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 API Gateway escuchando en puerto ${PORT}`));
+app.listen(PORT, () => console.log(` API Gateway escuchando en puerto ${PORT}`));
