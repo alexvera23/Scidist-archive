@@ -102,7 +102,7 @@ function downloadFile(call) {
   });
 }
 
-// 3. Worker de Replicación P2P
+// 3. Worker de Replicación P2P (Replicar y Borrar archivos)
 async function processReplicationTasks() {
   try {
     const response = await axios.get(`${METADATA_URL}/replication-tasks/${MY_NODE_ID}`);
@@ -110,17 +110,48 @@ async function processReplicationTasks() {
 
     if (tasks.length === 0) return;
 
-    console.log(`[P2P Worker] Encontradas ${tasks.length} tareas de replicación.`);
-    
     for (const task of tasks) {
+      const filePath = path.join(UPLOADS_DIR, `${task.file_hash}.pdf`);
+
+      // ========================================
+      // NUEVA LÓGICA: SI ES ORDEN DE BORRADO
+      // ========================================
+      if (task.task_type === 'DELETE') {
+        console.log(`[P2P Worker] ⚠️ Orden de eliminación recibida para: ${task.file_hash}`);
+        
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath); // El borrado físico real
+          console.log(`[P2P Worker] 🗑️ Archivo ${task.file_hash} borrado físicamente de disco.`);
+        } else {
+          console.log(`[P2P Worker] Archivo ${task.file_hash} ya no existía en este disco.`);
+        }
+
+        // Notificar a la BD que ya cumplimos
+        try {
+          await axios.post(`${METADATA_URL}/replication-tasks/complete`, {
+            task_id: task._id,
+            file_hash: task.file_hash,
+            task_type: 'DELETE' // <--- Muy importante pasarlo de vuelta
+          });
+        } catch (dbErr) {
+          console.error(`[P2P Worker] Error avisando borrado:`, dbErr.message);
+        }
+        
+        continue; // Pasamos a la siguiente tarea del bucle
+      }
+
+      // ========================================
+      // LÓGICA ORIGINAL: REPLICACIÓN
+      // ========================================
       console.log(`[P2P Worker] Replicando ${task.file_hash} hacia ${task.target_node}`);
       
-      const filePath = path.join(UPLOADS_DIR, `${task.file_hash}.pdf`);
       if (!fs.existsSync(filePath)) {
-        console.error(`[P2P Worker] Archivo no encontrado en disco: ${filePath}`);
+        console.error(`[P2P Worker] Archivo no encontrado para replicar: ${filePath}`);
         continue;
       }
 
+      // Conectarse dinámicamente usando la lista del registro si es necesario, 
+      // o usar el formato estático si asumes el puerto 50051
       const targetAddress = `${task.target_node}:50051`;
       const client = new storageProto.StorageService(targetAddress, grpc.credentials.createInsecure());
 
@@ -129,13 +160,12 @@ async function processReplicationTasks() {
           console.error(`[P2P Worker] Error enviando a ${task.target_node}:`, error.message);
           return;
         }
-        
-        console.log(`[P2P Worker] Copia exitosa en ${task.target_node}. Notificando a BD...`);
+        console.log(`[P2P Worker] Copia exitosa en ${task.target_node}.`);
         try {
           await axios.post(`${METADATA_URL}/replication-tasks/complete`, {
             task_id: task._id,
             file_hash: task.file_hash,
-            target_node: task.target_node
+            task_type: 'REPLICATE' // <--- Pasarlo de vuelta
           });
         } catch (dbErr) {
           console.error(`[P2P Worker] Error actualizando estado en BD:`, dbErr.message);
@@ -149,7 +179,7 @@ async function processReplicationTasks() {
       readStream.on('end', () => call.end());
     }
   } catch (error) {
-    console.error('[P2P Worker] Error contactando al Metadata Service');
+    // Silenciado para no llenar los logs, o puedes dejar el console.error
   }
 }
 
