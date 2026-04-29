@@ -269,7 +269,7 @@ app.post('/api/v1/nodes/register', async (req, res) => {
 // 2. Listar Nodos (Llamado por el Gateway y por otros nodos para replicación)
 app.get('/api/v1/nodes', async (req, res) => {
   try {
-    const nodes = await ActiveNode.find();
+    const nodes = await ActiveNode.find({status: 'up'});
     res.json(nodes);
   } catch (error) {
     res.status(500).json({ error: 'Error al obtener nodos' });
@@ -288,7 +288,7 @@ app.delete('/api/v1/articles/:hash', async (req, res) => {
       return res.status(404).json({ error: 'Archivo no encontrado o acceso denegado' });
     }
 
-    // 2. ✅ FIX: Consultar StorageMap para saber en qué nodos vive el archivo
+    // 2.  FIX: Consultar StorageMap para saber en qué nodos vive el archivo
     //    (article.node_id no existe en el modelo, eso estaba roto)
     const storageMaps = await StorageMap.find({ file_hash: hash, status: 'synced' });
     const nodesWithFile = storageMaps.map(s => s.node_id);
@@ -302,7 +302,7 @@ app.delete('/api/v1/articles/:hash', async (req, res) => {
       await ReplicationTask.create({
         file_hash: hash,
         source_node: 'SYSTEM',
-        target_node: nodeId,   // ✅ Ahora sí tiene valor real
+        target_node: nodeId,   // Ahora sí tiene valor real
         task_type: 'DELETE'
       });
     }
