@@ -23,7 +23,6 @@ services/storage-node/uploads/
 
 services/api-gateway/temp_uploads/
 *.pdf
-*.txt
 *.mkv
 *.jpeg
 *.jpg

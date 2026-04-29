@@ -9,7 +9,7 @@ const { User, Theme, Subtheme, Article, StorageMap, NodeHealth, ReplicationTask,
 const app = express();
 app.use(express.json());
 
-const MONGO_URI = process.env.MONGO_URI;
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://mongo1:27017,mongo2:27017,mongo3:27017/scidist?replicaSet=rs0&serverSelectionTimeoutMS=5000';
 
 mongoose.connect(MONGO_URI)
   .then(async () => {
@@ -72,7 +72,8 @@ app.post('/api/v1/setup-test-user', async (req, res) => {
 
   } catch (error) {
     console.error('Error en setup:', error);
-    res.status(500).json({ error: 'Fallo al crear entorno de prueba' });
+    console.error(error);
+    res.status(500).json({ error: 'Fallo al crear entorno de prueba',details: error.message });
   }
 });
 

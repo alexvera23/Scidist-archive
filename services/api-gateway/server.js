@@ -290,4 +290,4 @@ app.get('/api/v1/download/:hash', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(` API Gateway escuchando en puerto ${PORT}`));
+app.listen(PORT, () => console.log(`API Gateway escuchando en puerto ${PORT}`));
