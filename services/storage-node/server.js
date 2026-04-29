@@ -117,7 +117,7 @@ async function processReplicationTasks() {
       // NUEVA LÓGICA: SI ES ORDEN DE BORRADO
       // ========================================
       if (task.task_type === 'DELETE') {
-        console.log(`[P2P Worker] ⚠️ ORDEN DE BORRADO: ${task.file_hash}`);
+        console.log(`[P2P Worker]  ORDEN DE BORRADO: ${task.file_hash}`);
 
         //  FIX: Buscar el archivo sin asumir la extensión, igual que hace downloadFile
         const files = fs.readdirSync(UPLOADS_DIR);
@@ -170,7 +170,7 @@ async function processReplicationTasks() {
             file_hash: task.file_hash,
             task_type: 'REPLICATE' // <--- Pasarlo de vuelta
           });
-        } catch (dbErr) {
+        } catch (dbErr) {J
           console.error(`[P2P Worker] Error actualizando estado en BD:`, dbErr.message);
         }
       });
@@ -180,6 +180,10 @@ async function processReplicationTasks() {
       
       readStream.on('data', (chunk) => call.write({ chunk: chunk }));
       readStream.on('end', () => call.end());
+      readStream.on('error', (streamErr) => {
+        console.error(`[P2P Worker]  Error al leer archivo (¿fue borrado?):`, streamErr.message);
+        call.end(); // Terminamos la llamada gRPC de forma segura para no crashear
+      });
     }
   } catch (error) {
     // Silenciado para no llenar los logs, o puedes dejar el console.error
