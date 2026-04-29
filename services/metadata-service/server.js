@@ -205,13 +205,27 @@ app.get('/api/v1/replication-tasks/:node_id', async (req, res) => {
 });
 
 app.post('/api/v1/replication-tasks/complete', async (req, res) => {
-  const { task_id, file_hash, target_node } = req.body;
+  const { task_id, file_hash, target_node, task_type } = req.body;
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
     await ReplicationTask.findByIdAndUpdate(task_id, { status: 'done' }, { session });
-    const newMap = new StorageMap({ file_hash, node_id: target_node, is_primary: false, status: 'synced' });
-    await newMap.save({ session });
+
+    if (task_type === 'DELETE') {
+      const pendingDeletes = await ReplicationTask.countDocuments(
+        { file_hash, task_type: 'DELETE', status: { $ne: 'done' } },
+        { session }
+      );
+
+      if (pendingDeletes === 0) {
+        await Article.findOneAndDelete({ file_hash }, { session });
+        console.log(`[Metadata]  Archivo ${file_hash} borrado físicamente de toda la red y BD.`);
+      }
+    } else {
+      const newMap = new StorageMap({ file_hash, node_id: target_node, is_primary: false, status: 'synced' });
+      await newMap.save({ session });
+    }
+
     await session.commitTransaction();
     session.endSession();
     res.json({ message: 'OK' });
@@ -245,6 +259,44 @@ app.get('/api/v1/nodes', async (req, res) => {
     res.json(nodes);
   } catch (error) {
     res.status(500).json({ error: 'Error al obtener nodos' });
+  }
+});
+
+// Nuevo: Eliminación Distribuidad (Hard Delete )
+app.delete('/api/v1/articles/:hash', async (req, res) => {
+  const { hash } = req.params;
+  const { owner_id } = req.query;
+
+  try {
+    // 1. Buscar el artículo y verificar que le pertenece al usuario
+    const article = await Article.findOne({ file_hash: hash, owner_id });
+    if (!article) {
+      return res.status(404).json({ error: 'Archivo no encontrado o acceso denegado' });
+    }
+
+    // 2. Marcar como "pendiente de borrado" para que ya no se pueda descargar
+    article.theme_id = null; // Opcional: lo quitamos de la vista
+    // Nota: Si en tu modelo tienes un campo 'status', aquí lo pondrías en 'pending_deletion'
+    await article.save();
+
+    // 3. Crear Tareas de Borrado para el nodo principal y las réplicas
+    const nodesWithFile = [article.node_id, ...article.replicas];
+    
+    for (const nodeId of nodesWithFile) {
+      await ReplicationTask.create({
+        file_hash: hash,
+        source_node: 'SYSTEM', // Es una orden del sistema, no de otro nodo
+        target_node: nodeId,
+        task_type: 'DELETE'    // <-- ¡NUEVO CAMPO!
+      });
+    }
+
+    console.log(`[Metadata] Iniciada eliminación distribuida para: ${hash}`);
+    res.status(200).json({ message: 'Orden de eliminación distribuida enviada con éxito' });
+
+  } catch (error) {
+    console.error('[Metadata] Error en eliminación:', error);
+    res.status(500).json({ error: 'Fallo al iniciar el borrado' });
   }
 });
 
