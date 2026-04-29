@@ -52,7 +52,7 @@ const ReplicationTaskSchema = new mongoose.Schema({
   file_hash: { type: String, required: true },
   source_node: String,
   target_node: String,
-  task_type: {type: String, default: 'REPLICATE'},
+  task_type: { type: String, default: 'REPLICATE' },
   status: { type: String, enum: ['pending', 'in_progress', 'done', 'failed'], default: 'pending' },
   retry_count: { type: Number, default: 0 }
 }, { timestamps: true });

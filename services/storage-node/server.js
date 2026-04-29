@@ -117,29 +117,32 @@ async function processReplicationTasks() {
       // NUEVA LÓGICA: SI ES ORDEN DE BORRADO
       // ========================================
       if (task.task_type === 'DELETE') {
-        console.log(`[P2P Worker] ⚠️ Orden de eliminación recibida para: ${task.file_hash}`);
-        
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath); // El borrado físico real
-          console.log(`[P2P Worker] 🗑️ Archivo ${task.file_hash} borrado físicamente de disco.`);
+        console.log(`[P2P Worker] ⚠️ ORDEN DE BORRADO: ${task.file_hash}`);
+
+        //  FIX: Buscar el archivo sin asumir la extensión, igual que hace downloadFile
+        const files = fs.readdirSync(UPLOADS_DIR);
+        const targetFileName = files.find(f => f.startsWith(task.file_hash));
+
+        if (targetFileName) {
+          const filePath = path.join(UPLOADS_DIR, targetFileName);
+          fs.unlinkSync(filePath);
+          console.log(`[P2P Worker]  Archivo ${targetFileName} borrado del disco físico.`);
         } else {
-          console.log(`[P2P Worker] Archivo ${task.file_hash} ya no existía en este disco.`);
+          console.log(`[P2P Worker] El archivo ${task.file_hash} ya no estaba en el disco.`);
         }
 
-        // Notificar a la BD que ya cumplimos
         try {
           await axios.post(`${METADATA_URL}/replication-tasks/complete`, {
             task_id: task._id,
             file_hash: task.file_hash,
-            task_type: 'DELETE' // <--- Muy importante pasarlo de vuelta
+            task_type: 'DELETE'
           });
+          console.log(`[P2P Worker]  Borrado notificado al Metadata Service.`);
         } catch (dbErr) {
-          console.error(`[P2P Worker] Error avisando borrado:`, dbErr.message);
+          console.error(`[P2P Worker]  Error notificando borrado:`, dbErr.message);
         }
-        
-        continue; // Pasamos a la siguiente tarea del bucle
+        continue;
       }
-
       // ========================================
       // LÓGICA ORIGINAL: REPLICACIÓN
       // ========================================

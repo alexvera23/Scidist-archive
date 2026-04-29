@@ -199,9 +199,23 @@ app.post('/api/v1/articles', async (req, res) => {
 // ... (Los endpoints de ReplicationTask y app.listen() siguen igual)
 app.get('/api/v1/replication-tasks/:node_id', async (req, res) => {
   try {
-    const tasks = await ReplicationTask.find({ source_node: req.params.node_id, status: 'pending' }).limit(5);
+    const nodeId = req.params.node_id;
+    
+    // Buscar tareas donde el nodo es el ORIGEN (para replicar) 
+    // O donde el nodo es el OBJETIVO y la tarea es BORRAR
+    const tasks = await ReplicationTask.find({
+      status: 'pending',
+      $or: [
+        { source_node: nodeId, task_type: { $ne: 'DELETE' } }, // Tareas clásicas de replicación
+        { target_node: nodeId, task_type: 'DELETE' }           // Nuevas tareas de borrado
+      ]
+    });
+    
     res.json(tasks);
-  } catch (error) { res.status(500).json({ error: 'Error' }); }
+  } catch (error) {
+    console.error('Error obteniendo tareas:', error);
+    res.status(500).json({ error: 'Error interno' });
+  }
 });
 
 app.post('/api/v1/replication-tasks/complete', async (req, res) => {
@@ -268,30 +282,32 @@ app.delete('/api/v1/articles/:hash', async (req, res) => {
   const { owner_id } = req.query;
 
   try {
-    // 1. Buscar el artículo y verificar que le pertenece al usuario
+    // 1. Verificar que el artículo le pertenece al usuario
     const article = await Article.findOne({ file_hash: hash, owner_id });
     if (!article) {
       return res.status(404).json({ error: 'Archivo no encontrado o acceso denegado' });
     }
 
-    // 2. Marcar como "pendiente de borrado" para que ya no se pueda descargar
-    article.theme_id = null; // Opcional: lo quitamos de la vista
-    // Nota: Si en tu modelo tienes un campo 'status', aquí lo pondrías en 'pending_deletion'
-    await article.save();
+    // 2. ✅ FIX: Consultar StorageMap para saber en qué nodos vive el archivo
+    //    (article.node_id no existe en el modelo, eso estaba roto)
+    const storageMaps = await StorageMap.find({ file_hash: hash, status: 'synced' });
+    const nodesWithFile = storageMaps.map(s => s.node_id);
 
-    // 3. Crear Tareas de Borrado para el nodo principal y las réplicas
-    const nodesWithFile = [article.node_id, ...article.replicas];
-    
+    if (nodesWithFile.length === 0) {
+      return res.status(404).json({ error: 'No se encontraron nodos con ese archivo' });
+    }
+
+    // 3. Crear una tarea DELETE por cada nodo que tiene el archivo
     for (const nodeId of nodesWithFile) {
       await ReplicationTask.create({
         file_hash: hash,
-        source_node: 'SYSTEM', // Es una orden del sistema, no de otro nodo
-        target_node: nodeId,
-        task_type: 'DELETE'    // <-- ¡NUEVO CAMPO!
+        source_node: 'SYSTEM',
+        target_node: nodeId,   // ✅ Ahora sí tiene valor real
+        task_type: 'DELETE'
       });
     }
 
-    console.log(`[Metadata] Iniciada eliminación distribuida para: ${hash}`);
+    console.log(`[Metadata] Eliminación distribuida iniciada para: ${hash} en nodos: ${nodesWithFile.join(', ')}`);
     res.status(200).json({ message: 'Orden de eliminación distribuida enviada con éxito' });
 
   } catch (error) {
