@@ -124,7 +124,7 @@ services:
       - NODE_ID=storage-node-6
       - PORT=50051
     volumes:
-      - ./data/storage5:/app/uploads:Z
+      - ./data/storage6:/app/uploads:Z
       - ./proto:/app/proto:ro
     networks:
       - scidist-net        
@@ -136,7 +136,7 @@ services:
       - NODE_ID=storage-node-7
       - PORT=50051
     volumes:
-      - ./data/storage5:/app/uploads:Z
+      - ./data/storage7:/app/uploads:Z
       - ./proto:/app/proto:ro
     networks:
       - scidist-net  
