@@ -289,5 +289,26 @@ app.get('/api/v1/download/:hash', async (req, res) => {
   }
 });
 
+// ==========================================
+// ENDPOINT: BORRAR ARCHIVO
+// ==========================================
+app.delete('/api/v1/delete/:hash', async (req, res) => {
+  const fileHash = req.params.hash;
+  const userId = req.headers['x-user-id'];
+
+  if (!userId) {
+    return res.status(401).json({ error: 'Falta la cabecera x-user-id' });
+  }
+
+  try {
+    const response = await axios.delete(`http://metadata-service:3001/api/v1/articles/${fileHash}?owner_id=${userId}`);
+    res.status(response.status).json(response.data);
+  } catch (error) {
+    const status = error.response ? error.response.status : 500;
+    const msg = error.response ? error.response.data.error : 'Error interno del Gateway';
+    res.status(status).json({ error: msg });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`API Gateway escuchando en puerto ${PORT}`));

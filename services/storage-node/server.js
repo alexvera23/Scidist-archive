@@ -17,6 +17,7 @@ const MY_ADDRESS = `${MY_NODE_ID}:${PORT}`;
 const udpClient = dgram.createSocket('udp4');
 const METADATA_UDP_PORT = 3002;
 const METADATA_HOST = 'metadata-service';
+let isProcessingTasks = false;
 
 fs.ensureDirSync(UPLOADS_DIR);
 
@@ -104,52 +105,91 @@ function downloadFile(call) {
 
 // 3. Worker de Replicación P2P
 async function processReplicationTasks() {
+  if (isProcessingTasks) return; // Evitar carrera si el ciclo anterior no ha terminado
+  isProcessingTasks = true;
+
   try {
     const response = await axios.get(`${METADATA_URL}/replication-tasks/${MY_NODE_ID}`);
     const tasks = response.data;
 
     if (tasks.length === 0) return;
-
-    console.log(`[P2P Worker] Encontradas ${tasks.length} tareas de replicación.`);
     
     for (const task of tasks) {
-      console.log(`[P2P Worker] Replicando ${task.file_hash} hacia ${task.target_node}`);
-      
-      const filePath = path.join(UPLOADS_DIR, `${task.file_hash}.pdf`);
-      if (!fs.existsSync(filePath)) {
-        console.error(`[P2P Worker] Archivo no encontrado en disco: ${filePath}`);
-        continue;
-      }
+      // === CASO 1: ORDEN DE BORRADO ===
+      if (task.task_type === 'DELETE') {
+        console.log(`[P2P Worker] ⚠️ ORDEN DE BORRADO: ${task.file_hash}`);
+        const files = fs.readdirSync(UPLOADS_DIR);
+        const targetFileName = files.find(f => f.startsWith(task.file_hash));
 
-      const targetAddress = `${task.target_node}:50051`;
-      const client = new storageProto.StorageService(targetAddress, grpc.credentials.createInsecure());
-
-      const call = client.UploadFile(async (error, response) => {
-        if (error) {
-          console.error(`[P2P Worker] Error enviando a ${task.target_node}:`, error.message);
-          return;
+        if (targetFileName) {
+          try {
+            fs.unlinkSync(path.join(UPLOADS_DIR, targetFileName));
+            console.log(`[P2P Worker] 🗑️ Archivo borrado físicamente.`);
+          } catch (e) {
+            console.error(`[P2P Worker] Error físico al borrar:`, e.message);
+          }
         }
-        
-        console.log(`[P2P Worker] Copia exitosa en ${task.target_node}. Notificando a BD...`);
+
         try {
           await axios.post(`${METADATA_URL}/replication-tasks/complete`, {
             task_id: task._id,
             file_hash: task.file_hash,
-            target_node: task.target_node
+            target_node: task.target_node,
+            task_type: 'DELETE'
           });
-        } catch (dbErr) {
-          console.error(`[P2P Worker] Error actualizando estado en BD:`, dbErr.message);
-        }
-      });
+        } catch (dbErr) {}
+        continue;
+      }
 
-      call.write({ info: { file_hash: task.file_hash, extension: '.pdf' } });
-      const readStream = fs.createReadStream(filePath, { highWaterMark: 1024 * 64 });
+      // === CASO 2: ORDEN DE REPLICACIÓN ===
+      console.log(`[P2P Worker] Replicando ${task.file_hash} hacia ${task.target_node}`);
+      const files = fs.readdirSync(UPLOADS_DIR);
+      const targetFileName = files.find(f => f.startsWith(task.file_hash));
       
-      readStream.on('data', (chunk) => call.write({ chunk: chunk }));
-      readStream.on('end', () => call.end());
+      if (!targetFileName) {
+        // Prevención de Carrera: El archivo desapareció (Probablemente un Hard Delete simultáneo)
+        console.warn(`[P2P Worker] Archivo ${task.file_hash} no existe para replicar. Ignorando.`);
+        continue;
+      }
+
+      const filePath = path.join(UPLOADS_DIR, targetFileName);
+      const targetAddress = `${task.target_node}:50051`;
+      const client = new storageProto.StorageService(targetAddress, grpc.credentials.createInsecure());
+
+      await new Promise((resolve) => {
+        const call = client.UploadFile(async (error, response) => {
+          if (!error) {
+            console.log(`[P2P Worker] Copia exitosa en ${task.target_node}.`);
+            try {
+              await axios.post(`${METADATA_URL}/replication-tasks/complete`, {
+                task_id: task._id,
+                file_hash: task.file_hash,
+                target_node: task.target_node,
+                task_type: 'REPLICATE'
+              });
+            } catch (dbErr) {}
+          }
+          resolve(); // Liberar la promesa termine bien o mal
+        });
+
+        call.write({ info: { file_hash: task.file_hash, extension: path.extname(targetFileName) } });
+        const readStream = fs.createReadStream(filePath, { highWaterMark: 1024 * 64 });
+        
+        readStream.on('data', (chunk) => call.write({ chunk: chunk }));
+        readStream.on('end', () => call.end());
+        
+        // Prevención de Crash: Si el archivo se borra a mitad de la lectura
+        readStream.on('error', (err) => {
+          console.error(`[P2P Worker] Lectura interrumpida para ${task.file_hash}:`, err.message);
+          call.end();
+          resolve();
+        });
+      });
     }
   } catch (error) {
-    console.error('[P2P Worker] Error contactando al Metadata Service');
+    // Silenciado para no spamear logs si el Metadata reinicia
+  } finally {
+    isProcessingTasks = false; // Liberamos el Mutex siempre
   }
 }
 

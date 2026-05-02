@@ -196,29 +196,46 @@ app.post('/api/v1/articles', async (req, res) => {
   }
 });
 
-// ... (Los endpoints de ReplicationTask y app.listen() siguen igual)
+// Obtener tareas pendientes del nodo (Actualizado para REPLICATE y DELETE)
 app.get('/api/v1/replication-tasks/:node_id', async (req, res) => {
   try {
-    const tasks = await ReplicationTask.find({ source_node: req.params.node_id, status: 'pending' }).limit(5);
+    const nodeId = req.params.node_id;
+    const tasks = await ReplicationTask.find({
+      status: 'pending',
+      $or: [
+        { source_node: nodeId, task_type: { $ne: 'DELETE' } }, // Replicación normal
+        { target_node: nodeId, task_type: 'DELETE' }           // Órdenes de ejecución (Borrado)
+      ]
+    }).limit(5);
     res.json(tasks);
   } catch (error) { res.status(500).json({ error: 'Error' }); }
 });
 
+// Completar tarea (Actualizado para limpiar StorageMap al borrar)
 app.post('/api/v1/replication-tasks/complete', async (req, res) => {
-  const { task_id, file_hash, target_node } = req.body;
+  const { task_id, file_hash, target_node, task_type } = req.body;
   const session = await mongoose.startSession();
   session.startTransaction();
+  
   try {
     await ReplicationTask.findByIdAndUpdate(task_id, { status: 'done' }, { session });
-    const newMap = new StorageMap({ file_hash, node_id: target_node, is_primary: false, status: 'synced' });
-    await newMap.save({ session });
+
+    if (task_type === 'DELETE') {
+      // Si fue un borrado, quitamos este nodo del mapa de almacenamiento
+      await StorageMap.findOneAndDelete({ file_hash, node_id: target_node }, { session });
+    } else {
+      // Si fue replicación, lo agregamos al mapa
+      const newMap = new StorageMap({ file_hash, node_id: target_node, is_primary: false, status: 'synced' });
+      await newMap.save({ session });
+    }
+
     await session.commitTransaction();
-    session.endSession();
     res.json({ message: 'OK' });
   } catch (error) {
     await session.abortTransaction();
-    session.endSession();
     res.status(500).json({ error: 'Error' });
+  } finally {
+    session.endSession();
   }
 });
 
@@ -245,6 +262,64 @@ app.get('/api/v1/nodes', async (req, res) => {
     res.json(nodes);
   } catch (error) {
     res.status(500).json({ error: 'Error al obtener nodos' });
+  }
+});
+
+// ==========================================
+// NUEVO: BORRADO DISTRIBUIDO (REFERENCE COUNTING)
+// ==========================================
+app.delete('/api/v1/articles/:hash', async (req, res) => {
+  const file_hash = req.params.hash;
+  const { owner_id } = req.query;
+
+  if (!owner_id) return res.status(400).json({ error: 'Falta owner_id' });
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    // 1. Borrado Lógico: Verificamos propiedad y borramos el registro del usuario
+    const deletedArticle = await Article.findOneAndDelete({ file_hash, owner_id }, { session });
+    
+    if (!deletedArticle) {
+      await session.abortTransaction();
+      return res.status(404).json({ error: 'Archivo no encontrado o no eres el propietario' });
+    }
+
+    // 2. Conteo de Referencias (Deduplicación)
+    const remainingOwners = await Article.countDocuments({ file_hash }, { session });
+
+    if (remainingOwners > 0) {
+      // Caso A: Alguien más tiene el archivo. Terminamos aquí.
+      await session.commitTransaction();
+      return res.status(200).json({ 
+        message: 'Borrado lógico exitoso. El archivo físico se mantiene porque otros usuarios lo comparten.' 
+      });
+    }
+
+    // 3. Caso B: Eres el último dueño. Iniciamos el Hard Delete Distribuido.
+    const storages = await StorageMap.find({ file_hash }, null, { session });
+    
+    if (storages.length > 0) {
+      const deleteTasks = storages.map(s => ({
+        file_hash: file_hash,
+        source_node: 'SYSTEM',
+        target_node: s.node_id,
+        task_type: 'DELETE',
+        status: 'pending'
+      }));
+      await ReplicationTask.insertMany(deleteTasks, { session });
+    }
+
+    await session.commitTransaction();
+    res.status(200).json({ message: 'Borrado físico distribuido iniciado. Eras el último propietario.' });
+
+  } catch (error) {
+    await session.abortTransaction();
+    console.error('Error en borrado:', error);
+    res.status(500).json({ error: 'Error interno procesando el borrado' });
+  } finally {
+    session.endSession();
   }
 });
 

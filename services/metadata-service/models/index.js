@@ -47,11 +47,12 @@ const StorageMapSchema = new mongoose.Schema({
   status: { type: String, enum: ['synced', 'error'], default: 'synced' }
 });
 
-// Tareas de Replicación
+// Tareas de Replicación (Actualizado para soportar borrado)
 const ReplicationTaskSchema = new mongoose.Schema({
   file_hash: { type: String, required: true },
-  source_node: String,
+  source_node: String, // Será 'SYSTEM' para borrados
   target_node: String,
+  task_type: { type: String, enum: ['REPLICATE', 'DELETE'], default: 'REPLICATE' }, // <-- NUEVO
   status: { type: String, enum: ['pending', 'in_progress', 'done', 'failed'], default: 'pending' },
   retry_count: { type: Number, default: 0 }
 }, { timestamps: true });
