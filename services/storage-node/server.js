@@ -7,16 +7,24 @@ const dgram = require('dgram');
 
 const PROTO_PATH = path.join(__dirname, 'proto', 'storage.proto');
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
-const METADATA_URL = 'http://metadata-service:3001/api/v1';
 
 const MY_NODE_ID = process.env.NODE_ID;
-// El puerto por defecto si no viene en las variables de entorno
 const PORT = process.env.PORT || '50051'; 
-const MY_ADDRESS = `${MY_NODE_ID}:${PORT}`;
+
+// ==========================================
+// NUEVO: CONFIGURACIÓN MULTI-RED (TAILSCALE)
+// ==========================================
+// Si estamos en la red VPN, usamos la IP, si no, usamos el nombre del contenedor
+const TAILSCALE_IP = process.env.TAILSCALE_IP || MY_NODE_ID;
+const MY_ADDRESS = `${TAILSCALE_IP}:${PORT}`;
+
+// Apuntamos al Metadata Service a través de la red VPN
+const METADATA_HOST = process.env.METADATA_HOST || 'metadata-service';
+const METADATA_URL = `http://${METADATA_HOST}:3001/api/v1`;
 
 const udpClient = dgram.createSocket('udp4');
 const METADATA_UDP_PORT = 3002;
-const METADATA_HOST = 'metadata-service';
+// ==========================================
 let isProcessingTasks = false;
 
 fs.ensureDirSync(UPLOADS_DIR);
