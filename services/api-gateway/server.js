@@ -191,52 +191,85 @@ app.post('/api/v1/upload', upload.single('file'), async (req, res) => {
       return res.status(503).json({ error: 'No hay nodos de almacenamiento disponibles en la red' });
     }
 
-    // 6. ENRUTAMIENTO P2P Y TRANSFERENCIA gRPC
+    // 6. ENRUTAMIENTO P2P Y TRANSFERENCIA gRPC (CON FAILOVER)
     const { primary: targetNode, replicas: replicaNodes } = getRoutingNodes(fileHash, activeNodes);
-    const client = new storageProto.StorageService(targetNode.address, grpc.credentials.createInsecure());
+    
+    // Armamos nuestra lista de candidatos: Primario primero, réplicas después
+    const candidateNodes = [targetNode, ...replicaNodes];
+    
+    let uploadSuccess = false;
+    let successfulNode = null;
 
-    const call = client.UploadFile(async (error, response) => {
-      fs.unlinkSync(tempPath); 
-      
-      if (error) {
-        return res.status(500).json({ error: 'Error al transferir al nodo de almacenamiento' });
-      }
-
-      // 7. GUARDAR EN BASE DE DATOS DISTRIBUIDA
+    // Intentamos subir el archivo iterando sobre los nodos disponibles
+    for (const node of candidateNodes) {
       try {
-        const metadataPayload = {
-          file_hash: fileHash,
-          title: originalName,
-          owner_id: userId,          
-          theme_id: finalThemeId,        // Categoría decidida por la IA
-          subtheme_id: finalSubthemeId,  // Subcategoría decidida por la IA
-          node_id: targetNode.node_id,
-          replicas: replicaNodes.map(n => n.node_id) 
-        };
-
-        const metadataResponse = await axios.post('http://metadata-service:3001/api/v1/articles', metadataPayload);
+        console.log(`[Gateway] Intentando subir a: ${node.node_id}`);
         
-        res.status(200).json({
-          message: 'Archivo analizado por IA, distribuido y registrado',
-          file_hash: fileHash,
-          classification: {
-            assigned_theme_id: finalThemeId,
-            assigned_subtheme_id: finalSubthemeId
-          }
+        await new Promise((resolve, reject) => {
+          const client = new storageProto.StorageService(node.address, grpc.credentials.createInsecure());
+          
+          const call = client.UploadFile((error, response) => {
+            if (error) return reject(error);
+            resolve(response);
+          });
+
+          // Escribimos los metadatos y el buffer del archivo
+          call.write({ info: { file_hash: fileHash, extension: extension } });
+          call.write({ chunk: fileBuffer }); // Ya lo teníamos en memoria, muy conveniente
+          call.end();
         });
 
-      } catch (metadataError) {
-        res.status(500).json({ error: 'Fallo el registro en base de datos' });
+        // Si la promesa se resuelve sin errores, marcamos el éxito y salimos del bucle
+        uploadSuccess = true;
+        successfulNode = node;
+        console.log(`[Gateway]  Subida exitosa a ${node.node_id}`);
+        break; 
+
+      } catch (grpcErr) {
+        console.warn(`[Gateway]  Falló gRPC en ${node.node_id}. Saltando al siguiente...`);
       }
-    });
+    }
 
-    call.write({ info: { file_hash: fileHash, extension: extension } });
-    call.write({ chunk: fileBuffer });
-    call.end();
+    // Ya no necesitamos el archivo temporal, lo borramos siempre
+    fs.unlinkSync(tempPath);
 
+    if (!uploadSuccess) {
+      return res.status(503).json({ error: 'Error crítico: Ningún nodo de la red pudo recibir el archivo.' });
+    }
+     // 7. GUARDAR EN BASE DE DATOS DISTRIBUIDA
+    try {
+      // Determinamos quiénes quedan como réplicas basándonos en el nodo que realmente respondió
+      const finalReplicas = candidateNodes
+        .map(n => n.node_id)
+        .filter(id => id !== successfulNode.node_id);
+
+      const metadataPayload = {
+        file_hash: fileHash,
+        title: originalName,
+        owner_id: userId,          
+        theme_id: finalThemeId,        
+        subtheme_id: finalSubthemeId,  
+        node_id: successfulNode.node_id, // El héroe que respondió
+        replicas: finalReplicas 
+      };
+
+      const metadataResponse = await axios.post('http://metadata-service:3001/api/v1/articles', metadataPayload);
+      
+      res.status(200).json({
+        message: 'Archivo analizado por IA, distribuido y registrado',
+        file_hash: fileHash,
+        classification: {
+          assigned_theme_id: finalThemeId,
+          assigned_subtheme_id: finalSubthemeId
+        }
+      });
+
+    } catch (metadataError) {
+      res.status(500).json({ error: 'El archivo se subió, pero falló el registro en base de datos' });
+    }
   } catch (error) {
-    if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-    res.status(500).json({ error: 'Error interno del Gateway' });
+    console.error('[Gateway] Error en upload:', error);
+    res.status(500).json({ error: 'Error al procesar el archivo' });
   }
 });
 

@@ -258,10 +258,16 @@ app.post('/api/v1/nodes/register', async (req, res) => {
 // 2. Listar Nodos (Llamado por el Gateway y por otros nodos para replicación)
 app.get('/api/v1/nodes', async (req, res) => {
   try {
-    const nodes = await ActiveNode.find();
+    // 1. Consultar NodeHealth para saber quiénes están realmente vivos ("up")
+    const healthyNodes = await NodeHealth.find({ status: 'up' }).select('node_id');
+    const healthyIds = healthyNodes.map(n => n.node_id);
+
+    // 2. Buscar en ActiveNode solo los nodos que coincidan con esos IDs vivos
+    const nodes = await ActiveNode.find({ node_id: { $in: healthyIds } });
+    
     res.json(nodes);
   } catch (error) {
-    res.status(500).json({ error: 'Error al obtener nodos' });
+    res.status(500).json({ error: 'Error al obtener nodos activos' });
   }
 });
 
