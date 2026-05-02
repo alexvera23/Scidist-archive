@@ -115,7 +115,19 @@ services:
       - ./data/storage5:/app/uploads:Z
       - ./proto:/app/proto:ro
     networks:
-      - scidist-net    
+      - scidist-net  
+      
+  storage-node-6:
+    build: ./services/storage-node
+    container_name: storage-node-6
+    environment:
+      - NODE_ID=storage-node-6
+      - PORT=50051
+    volumes:
+      - ./data/storage5:/app/uploads:Z
+      - ./proto:/app/proto:ro
+    networks:
+      - scidist-net        
   
   storage-node-7:
     build: ./services/storage-node
