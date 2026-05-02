@@ -223,7 +223,70 @@ app.post('/api/v1/upload', upload.single('file'), async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ENDPOINT: DESCARGAR ARCHIVO
+// HELPER: Intenta descargar un archivo desde un nodo específico.
+//
+// Estrategia anti-corrupción: los headers HTTP (Content-Disposition, etc.)
+// NO se envían hasta que llega el primer chunk de datos del nodo. Así, si
+// el nodo falla antes de enviar nada (timeout, NOT_FOUND, UNAVAILABLE...),
+// la Promise resuelve `false` y el caller puede intentar el siguiente nodo
+// sin que el cliente haya recibido ningún byte corrupto todavía.
+//
+// Una vez que el primer chunk llega y se fijan los headers, estamos
+// comprometidos con ese nodo: si falla a mitad del stream, cerramos la
+// respuesta limpiamente (res.end) — es preferible a mezclar datos de dos
+// nodos distintos.
+// ─────────────────────────────────────────────────────────────────────────────
+function tryDownloadFromNode(node, fileHash, res, title) {
+  return new Promise((resolve) => {
+    const client = new storageProto.StorageService(
+      node.address,
+      grpc.credentials.createInsecure()
+    );
+    const call = client.DownloadFile({ file_hash: fileHash });
+
+    let committed = false; // true en cuanto enviamos el primer byte al cliente
+
+    call.on('data', (response) => {
+      if (!committed) {
+        // Primer chunk recibido — a partir de aquí no hay vuelta atrás.
+        committed = true;
+        res.setHeader('Content-Disposition', `attachment; filename="${title}"`);
+        res.setHeader('Content-Type', 'application/octet-stream');
+        res.setHeader('X-Served-By-Node', node.node_id);
+        res.setHeader('X-Is-Replica', String(!node.is_primary));
+      }
+      res.write(response.chunk);
+    });
+
+    call.on('end', () => {
+      if (committed) {
+        res.end();
+        resolve(true);
+      } else {
+        // Nodo respondió con stream vacío — tratar como fallo.
+        console.warn(`[Gateway] Nodo ${node.node_id} devolvió stream vacío para ${fileHash}.`);
+        resolve(false);
+      }
+    });
+
+    call.on('error', (err) => {
+      if (committed) {
+        // Ya empezamos a enviar bytes — no podemos reintentar.
+        // Cerramos limpiamente para que el cliente al menos sepa que terminó.
+        console.error(`[Gateway] Error mid-stream en ${node.node_id}:`, err.message);
+        res.end();
+        resolve(true); // Resolvemos true para no seguir iterando (ya hubo respuesta parcial).
+      } else {
+        // Fallo antes de enviar nada — podemos intentar el siguiente nodo.
+        console.warn(`[Gateway] Nodo ${node.node_id} no disponible (${err.code || err.message}), probando siguiente réplica...`);
+        resolve(false);
+      }
+    });
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENDPOINT: DESCARGAR ARCHIVO (con failover automático entre réplicas)
 // ─────────────────────────────────────────────────────────────────────────────
 app.get('/api/v1/download/:hash', async (req, res) => {
   const fileHash = req.params.hash;
@@ -234,36 +297,37 @@ app.get('/api/v1/download/:hash', async (req, res) => {
   }
 
   try {
-    const activeNodes = await fetchActiveNodes();
-    if (activeNodes.length === 0) {
-      return res.status(503).json({ error: 'No hay nodos de almacenamiento disponibles en la red' });
-    }
-
+    // Metadata devuelve candidate_nodes[] ordenados: primario primero, réplicas después.
     const metadataUrl = `http://metadata-service:3001/api/v1/articles/${fileHash}?owner_id=${userId}`;
     const metadataResponse = await axios.get(metadataUrl);
-    const { title, node_id } = metadataResponse.data;
+    const { title, candidate_nodes } = metadataResponse.data;
 
-    const targetNode = activeNodes.find(n => n.node_id === node_id);
-    if (!targetNode) return res.status(503).json({ error: 'El nodo que contiene el archivo no está accesible actualmente' });
+    if (!candidate_nodes || candidate_nodes.length === 0) {
+      return res.status(503).json({ error: 'No hay nodos disponibles para este archivo' });
+    }
 
-    const client = new storageProto.StorageService(targetNode.address, grpc.credentials.createInsecure());
-    const call = client.DownloadFile({ file_hash: fileHash });
+    // Iterar en orden: primario → réplica 1 → réplica 2
+    for (const node of candidate_nodes) {
+      console.log(`[Gateway] Intentando descarga de ${fileHash} desde ${node.node_id} (${node.is_primary ? 'primario' : 'réplica'})...`);
+      const succeeded = await tryDownloadFromNode(node, fileHash, res, title);
+      if (succeeded) return; // Descarga completada (o mid-stream cerrada limpiamente).
+    }
 
-    res.setHeader('Content-Disposition', `attachment; filename="${title}"`);
-    res.setHeader('Content-Type', 'application/octet-stream');
-
-    call.on('data', (response) => res.write(response.chunk));
-    call.on('end', () => res.end());
-    call.on('error', (_err) => {
-      if (!res.headersSent) res.status(500).json({ error: 'Error gRPC' });
-      else res.end();
-    });
+    // Todos los nodos fallaron antes de enviar cualquier dato.
+    if (!res.headersSent) {
+      res.status(503).json({
+        error: 'Todos los nodos que contienen este archivo están fuera de línea.',
+        tried: candidate_nodes.map(n => n.node_id)
+      });
+    }
 
   } catch (error) {
     if (error.response && error.response.status === 404) {
       return res.status(404).json({ error: 'El archivo no existe o no te pertenece' });
     }
-    res.status(500).json({ error: 'Error interno' });
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Error interno al procesar la descarga' });
+    }
   }
 });
 

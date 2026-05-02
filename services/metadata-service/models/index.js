@@ -45,7 +45,7 @@ const StorageMapSchema = new mongoose.Schema({
   is_primary: { type: Boolean, default: false },
   version: { type: Number, default: 1 },
   status: { type: String, enum: ['synced', 'error'], default: 'synced' }
-});O
+});
 
 // Tareas de Replicación
 const ReplicationTaskSchema = new mongoose.Schema({
