@@ -4,19 +4,25 @@
       --gold: #c9a84c; --muted: #7a7065; --surface: #ede9df;
       --err: #e63946; --ok: #2a9d5c;
     }
-    html, body { height: 100%; }
+    html, body, #root {
+      height: 100%;
+    }
+
     body {
       background: var(--ink);
       color: var(--paper);
       font-family: 'DM Sans', sans-serif;
       font-weight: 300;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      min-height: 100vh;
-      overflow: hidden;
     }
 
     /* LEFT PANEL */
+    .login-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      min-height: 100vh;
+      background: var(--ink);
+      overflow: hidden;
+    }
     .left-panel {
       background: var(--ink);
       display: flex; flex-direction: column;
@@ -143,6 +149,8 @@
     }
     .checkbox-field a { color: var(--ink); font-weight: 500; }
 
+    
+
     /* SUBMIT */
     .btn-submit {
       width: 100%; padding: 1rem;
@@ -179,8 +187,20 @@
     .toast.success { border-left-color: var(--ok); }
     .toast.error { border-left-color: var(--err); }
 
+
+
     @media (max-width: 800px) {
-      body { grid-template-columns: 1fr; overflow: auto; }
-      .left-panel { display: none; }
-      .right-panel { padding: 2rem 1.5rem; min-height: 100vh; }
+      .login-container {
+        grid-template-columns: 1fr;
+        overflow: auto;
+      }
+
+      .left-panel {
+        display: none;
+      }
+
+      .right-panel {
+        padding: 2rem 1.5rem;
+        min-height: 100vh;
+      }
     }
