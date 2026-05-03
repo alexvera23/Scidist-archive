@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-// IP de Tailscale de tu PC Fedora (donde corre el Gateway)
+// IP de Tailscale de PC Fedora (donde corre el Gateway)
 const GATEWAY_URL = "http://100.119.151.81:3000/api/v1"; 
 
 const api = axios.create({
