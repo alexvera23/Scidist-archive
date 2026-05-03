@@ -64,18 +64,18 @@
 
     /* BOTÓN INGRESAR */
     .btn-ingresar {
-    font-family: 'DM Mono', monospace;
+    font-family: 'DM Mono', monospace !important;
     font-size: 0.75rem;
     text-transform: uppercase;
-    border: 1.5px solid var(--border);
-    background: transparent;
+    border: 1.5px transparent var(--border)!important;
+    background: transparent !important;
     color: var(--muted) !important;
     padding: 0.5rem 1.2rem;
     transition: 0.3s;
     }
 
     .btn-ingresar:hover {
-    background: var(--accent);
+    background: var(--accent) !important;
     color: var(--paper) !important;
     transform: translateY(-1px);
     }

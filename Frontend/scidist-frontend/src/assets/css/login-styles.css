@@ -47,6 +47,7 @@
     .panel-content { position: relative; z-index: 1; }
     .panel-content h2 {
       font-family: 'Bebas Neue', sans-serif;
+      color: var(--paper);
       font-size: clamp(3rem, 5vw, 5.5rem);
       line-height: 0.95; letter-spacing: 0.02em;
       margin-bottom: 1.5rem;

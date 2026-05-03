@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Navbar, Container, Form, InputGroup, Offcanvas, Accordion, Badge } from 'react-bootstrap';
-// Asume que copiaste tus estilos originales aquí
+import { Navbar, Container, Form, InputGroup, Offcanvas } from 'react-bootstrap';
 import '../../assets/css/app-styles.css'; 
+import 'bootstrap/dist/css/bootstrap.min.css';
+import 'bootstrap-icons/font/bootstrap-icons.css';
 
 // Datos de prueba (Estos vendrían del backend después del Login)
 const USER_CATEGORIES = [
@@ -14,14 +15,23 @@ const USER_CATEGORIES = [
 export default function AppLayout({ children, onSelectCategory }) {
   const [showSidebar, setShowSidebar] = useState(false);
   const [activeCategory, setActiveCategory] = useState('todos');
+  const [openAccordions, setOpenAccordions] = useState({});
+  
 
   const handleClose = () => setShowSidebar(false);
   const handleShow = () => setShowSidebar(true);
 
   const handleCategoryClick = (categoryName) => {
     setActiveCategory(categoryName);
-    onSelectCategory(categoryName);
-    handleClose(); // Opcional: Cerrar menú en móvil tras seleccionar
+    if (onSelectCategory) onSelectCategory(categoryName);
+    handleClose();
+  };
+
+  const toggleAccordion = (id) => {
+    setOpenAccordions(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
   };
 
   return (
@@ -47,7 +57,9 @@ export default function AppLayout({ children, onSelectCategory }) {
                 <Form.Control type="search" placeholder="Buscar archivos..." className="border-start-0" />
               </InputGroup>
             </Form>
-            <button className="btn btn-logout" type="button">Log out</button>
+            <button className="btn btn-logout" type="button">
+              <i className="bi bi-box-arrow-right me-2"></i>Log out
+            </button>
           </div>
         </Container>
       </Navbar>
@@ -55,46 +67,58 @@ export default function AppLayout({ children, onSelectCategory }) {
       {/* OFFCANVAS (Sidebar) */}
       <Offcanvas show={showSidebar} onHide={handleClose} placement="start" className="custom-sidebar">
         <Offcanvas.Header closeButton className="border-bottom">
-          <Offcanvas.Title className="sidebar-label" id="sidebarLabel">// Clasificación</Offcanvas.Title>
+          <Offcanvas.Title className="sidebar-label">CLASIFICACIÓN</Offcanvas.Title>
         </Offcanvas.Header>
         
         <Offcanvas.Body className="p-0">
-          <div className="sidebar-section py-3">
+          <div className="sidebar-nav">
             
             {/* Opción 'Todos' */}
             <button 
-              className={`sidebar-item ${activeCategory === 'todos' ? 'active' : ''} w-100 text-start border-0`}
+              className={`sidebar-item ${activeCategory === 'todos' ? 'active' : ''}`}
               onClick={() => handleCategoryClick('todos')}
             >
-              <span className="sidebar-left"><i className="bi bi-grid-1x2 me-2"></i> Todos</span>
+              <span><i className="bi bi-grid-3x3 me-3"></i> Todos los archivos</span>
               <span className="badge" id="badge-todos">28</span>
             </button>
 
-            {/* Accordion para Categorías y Subcategorías */}
-            <Accordion flush className="mt-2">
-              {USER_CATEGORIES.map((cat, index) => (
-                <Accordion.Item eventKey={index.toString()} key={cat.id} className="bg-transparent border-0">
-                  <Accordion.Header className="custom-accordion-header">
-                    <span className="sidebar-left"><i className={`bi ${cat.icon} me-2`}></i> {cat.name}</span>
-                    <Badge bg="secondary" className="ms-auto me-3 rounded-pill">{cat.count}</Badge>
-                  </Accordion.Header>
-                  <Accordion.Body className="p-0 bg-dark bg-opacity-10">
-                    <div className="d-flex flex-column">
-                      {cat.subthemes.map(sub => (
-                        <button 
-                          key={sub}
-                          className={`sidebar-item sub-item ${activeCategory === sub ? 'active' : ''} w-100 text-start border-0 ps-5 py-2`}
-                          style={{ fontSize: '0.9rem', backgroundColor: 'transparent' }}
-                          onClick={() => handleCategoryClick(sub)}
-                        >
-                          <i className="bi bi-arrow-return-right me-2 opacity-50"></i> {sub}
-                        </button>
-                      ))}
-                    </div>
-                  </Accordion.Body>
-                </Accordion.Item>
-              ))}
-            </Accordion>
+            {/* Categorías personalizadas */}
+            {USER_CATEGORIES.map((cat) => (
+              <div key={cat.id} className="category-group">
+                <button 
+                  className={`sidebar-item category-header ${activeCategory === cat.name ? 'active' : ''}`}
+                  onClick={() => toggleAccordion(cat.id)}
+                >
+                  <span>
+                    <i className={`bi ${cat.icon} me-3`}></i> 
+                    {cat.name}
+                  </span>
+                  <div className="d-flex align-items-center gap-2">
+                    <span className="badge">{cat.count}</span>
+                    <i className={`bi bi-chevron-${openAccordions[cat.id] ? 'down' : 'right'} transition-icon`}></i>
+                  </div>
+                </button>
+                
+                {/* Subcategorías */}
+                {openAccordions[cat.id] && (
+                  <div className="subcategories">
+                    {cat.subthemes.map(sub => (
+                      <button 
+                        key={sub}
+                        className={`sidebar-item sub-item ${activeCategory === sub ? 'active' : ''}`}
+                        onClick={() => handleCategoryClick(sub)}
+                      >
+                        <span>
+                          <i className="bi bi-arrow-return-right me-3 opacity-50"></i>
+                          {sub}
+                        </span>
+                        <span className="badge badge-sub">0</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
 
           </div>
         </Offcanvas.Body>
@@ -107,8 +131,8 @@ export default function AppLayout({ children, onSelectCategory }) {
 
       {/* FOOTER */}
       <footer className="text-center py-3 mt-auto border-top">
-        <div className="footer-logo" style={{ fontFamily: "'Bebas Neue', cursive", fontSize: '1.2rem' }}>Scidist-Archive</div>
-        <p className="footer-note mb-0 text-muted" style={{ fontSize: '0.85rem' }}>© 2026 Scidist-Archive — Clasificador Inteligente de Archivos</p>
+        <div className="footer-logo">Scidist-Archive</div>
+        <p className="footer-note mb-0">© 2026 Scidist-Archive — Clasificador Inteligente de Archivos</p>
       </footer>
     </div>
   );
