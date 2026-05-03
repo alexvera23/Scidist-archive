@@ -123,9 +123,11 @@ async function processReplicationTasks() {
     if (tasks.length === 0) return;
     
     for (const task of tasks) {
+
       // === CASO 1: ORDEN DE BORRADO ===
       if (task.task_type === 'DELETE') {
-        console.log(`[P2P Worker] ⚠️ ORDEN DE BORRADO: ${task.file_hash}`);
+        console.log(`[P2P Worker]  ORDEN DE BORRADO: ${task.file_hash}`);
+
         const files = fs.readdirSync(UPLOADS_DIR);
         const targetFileName = files.find(f => f.startsWith(task.file_hash));
 
@@ -146,28 +148,66 @@ async function processReplicationTasks() {
             task_type: 'DELETE'
           });
         } catch (dbErr) {}
+
         continue;
       }
 
       // === CASO 2: ORDEN DE REPLICACIÓN ===
       console.log(`[P2P Worker] Replicando ${task.file_hash} hacia ${task.target_node}`);
+
       const files = fs.readdirSync(UPLOADS_DIR);
       const targetFileName = files.find(f => f.startsWith(task.file_hash));
       
       if (!targetFileName) {
-        // Prevención de Carrera: El archivo desapareció (Probablemente un Hard Delete simultáneo)
+        // Prevención de Carrera: El archivo desapareció
         console.warn(`[P2P Worker] Archivo ${task.file_hash} no existe para replicar. Ignorando.`);
         continue;
       }
 
+      //  EL FIX: Buscar la IP de Tailscale y Puerto exacto del nodo destino
+      let targetAddress = "";
+
+      try {
+        const nodesResponse = await axios.get(`${METADATA_URL}/nodes`);
+        const targetNodeInfo = nodesResponse.data.find(
+          n => n.node_id === task.target_node
+        );
+        
+        if (!targetNodeInfo) {
+          console.warn(
+            `[P2P Worker] El nodo destino ${task.target_node} está inactivo. Reintentando luego.`
+          );
+          continue; // Saltamos esta tarea hasta que el nodo vuelva a encenderse
+        }
+        
+        // Ej: "100.119.51.81:50051"
+        targetAddress = targetNodeInfo.address;
+
+      } catch (err) {
+        console.error(
+          `[P2P Worker] Error buscando la IP del destino:`,
+          err.message
+        );
+        continue;
+      }
+
       const filePath = path.join(UPLOADS_DIR, targetFileName);
-      const targetAddress = `${task.target_node}:50051`;
-      const client = new storageProto.StorageService(targetAddress, grpc.credentials.createInsecure());
+
+      const client = new storageProto.StorageService(
+        targetAddress,
+        grpc.credentials.createInsecure()
+      );
 
       await new Promise((resolve) => {
+
         const call = client.UploadFile(async (error, response) => {
+
           if (!error) {
-            console.log(`[P2P Worker] Copia exitosa en ${task.target_node}.`);
+
+            console.log(
+              `[P2P Worker]  Copia exitosa en ${task.target_node} (${targetAddress}).`
+            );
+
             try {
               await axios.post(`${METADATA_URL}/replication-tasks/complete`, {
                 task_id: task._id,
@@ -176,31 +216,56 @@ async function processReplicationTasks() {
                 task_type: 'REPLICATE'
               });
             } catch (dbErr) {}
+
+          } else {
+
+            console.error(
+              `[P2P Worker]  Error gRPC enviando a ${task.target_node}:`,
+              error.message
+            );
           }
-          resolve(); // Liberar la promesa termine bien o mal
+
+          resolve();
         });
 
-        call.write({ info: { file_hash: task.file_hash, extension: path.extname(targetFileName) } });
-        const readStream = fs.createReadStream(filePath, { highWaterMark: 1024 * 64 });
+        call.write({
+          info: {
+            file_hash: task.file_hash,
+            extension: path.extname(targetFileName)
+          }
+        });
+
+        const readStream = fs.createReadStream(filePath, {
+          highWaterMark: 1024 * 64
+        });
         
-        readStream.on('data', (chunk) => call.write({ chunk: chunk }));
-        readStream.on('end', () => call.end());
+        readStream.on('data', (chunk) => {
+          call.write({ chunk: chunk });
+        });
+
+        readStream.on('end', () => {
+          call.end();
+        });
         
         // Prevención de Crash: Si el archivo se borra a mitad de la lectura
         readStream.on('error', (err) => {
-          console.error(`[P2P Worker] Lectura interrumpida para ${task.file_hash}:`, err.message);
+          console.error(
+            `[P2P Worker] Lectura interrumpida para ${task.file_hash}:`,
+            err.message
+          );
+
           call.end();
           resolve();
         });
       });
     }
+
   } catch (error) {
     // Silenciado para no spamear logs si el Metadata reinicia
   } finally {
     isProcessingTasks = false; // Liberamos el Mutex siempre
   }
 }
-
 // 4. Latidos UDP (Salud)
 function sendHearbeat(){
   const payload = Buffer.from(JSON.stringify({

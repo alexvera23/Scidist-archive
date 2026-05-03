@@ -1,179 +1,51 @@
 services:
-  mongo1:
-    image: mongo:7.0
-    container_name: mongo1
-    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
-    ports:
-      - "27017:27017"
-    volumes:
-      - ./data/mongo1:/data/db:Z
-    networks:
-      - scidist-net
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  mongo2:
+  mongo2: # Réplica de la base de datos
     image: mongo:7.0
     container_name: mongo2
     command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     ports:
-      - "27018:27017"
+      - "27018:27017" # En Windows será el 27017 nativo
     volumes:
-      - ./data/mongo2:/data/db:Z
-    networks:
-      - scidist-net
-
-  mongo3:
-    image: mongo:7.0
-    container_name: mongo3
-    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
-    ports:
-      - "27019:27017"
-    volumes:
-      - ./data/mongo3:/data/db:Z
-    networks:
-      - scidist-net
-
-  metadata-service:
-    build: ./services/metadata-service
-    container_name: metadata-service
-    ports:
-      - "3001:3001"
-    environment:
-      - MONGO_URI=mongodb://mongo1:27017,mongo2:27017,mongo3:27017/scidist?replicaSet=rs0
-    networks:
-      - scidist-net
-    depends_on:
-      mongo1:
-        condition: service_healthy
-
-  storage-node-1:
-    build: 
-      context: ./services/storage-node # <-- CAMBIO AQUÍ (Restauramos el contexto original)
-      dockerfile: Dockerfile
-    container_name: storage-node-1
-    environment:
-      - NODE_ID=storage-node-1
-      - PORT=50051
-    volumes:
-      - ./data/storage1:/app/uploads:Z
-      - ./proto:/app/proto:ro          # Esto sigue funcionando perfectamente
-    networks:
-      - scidist-net
+      - ./data/mongo2:/data/db
 
   storage-node-2:
-    build: 
-      context: ./services/storage-node # <-- CAMBIO AQUÍ
-      dockerfile: Dockerfile
+    build: ./services/storage-node
     container_name: storage-node-2
+    ports:
+      - "50052:50052" # Fíjate que cambiamos el puerto para que no choque
     environment:
       - NODE_ID=storage-node-2
-      - PORT=50051
+      - PORT=50052
+      - TAILSCALE_IP=${MY_TAILSCALE_IP} # La IP de Tailscale de esta PC Windows
+      - METADATA_HOST=${METADATA_HOST} # La IP de Tailscale de Fedora
     volumes:
-      - ./data/storage2:/app/uploads:Z
+      - ./data/storage2:/app/uploads
       - ./proto:/app/proto:ro
-    networks:
-      - scidist-net
 
   storage-node-3:
-    build:
-      context: ./services/storage-node # <-- CAMBIO AQUÍ
-      dockerfile: Dockerfile
+    build: ./services/storage-node
     container_name: storage-node-3
+    ports:
+      - "50053:50053" # Siguiente puerto disponible
     environment:
       - NODE_ID=storage-node-3
-      - PORT=50051
+      - PORT=50053
+      - TAILSCALE_IP=${MY_TAILSCALE_IP}
+      - METADATA_HOST=${METADATA_HOST}
     volumes:
-      - ./data/storage3:/app/uploads:Z
+      - ./data/storage3:/app/uploads
       - ./proto:/app/proto:ro
-    networks:
-      - scidist-net
-  
+
   storage-node-4:
     build: ./services/storage-node
     container_name: storage-node-4
+    ports:
+      - "50054:50054" # Siguiente puerto disponible
     environment:
       - NODE_ID=storage-node-4
-      - PORT=50051
+      - PORT=50054
+      - TAILSCALE_IP=${MY_TAILSCALE_IP}
+      - METADATA_HOST=${METADATA_HOST}
     volumes:
-      - ./data/storage4:/app/uploads:Z
+      - ./data/storage4:/app/uploads
       - ./proto:/app/proto:ro
-    networks:
-      - scidist-net
-
-
-  storage-node-5:
-    build: ./services/storage-node
-    container_name: storage-node-5
-    environment:
-      - NODE_ID=storage-node-5
-      - PORT=50051
-    volumes:
-      - ./data/storage5:/app/uploads:Z
-      - ./proto:/app/proto:ro
-    networks:
-      - scidist-net  
-      
-  storage-node-6:
-    build: ./services/storage-node
-    container_name: storage-node-6
-    environment:
-      - NODE_ID=storage-node-6
-      - PORT=50051
-    volumes:
-      - ./data/storage6:/app/uploads:Z
-      - ./proto:/app/proto:ro
-    networks:
-      - scidist-net        
-  
-  storage-node-7:
-    build: ./services/storage-node
-    container_name: storage-node-7
-    environment:
-      - NODE_ID=storage-node-7
-      - PORT=50051
-    volumes:
-      - ./data/storage7:/app/uploads:Z
-      - ./proto:/app/proto:ro
-    networks:
-      - scidist-net  
-  
-   
- 
-  api-gateway:
-    build: 
-      context: ./services/api-gateway
-      dockerfile: Dockerfile
-    container_name: api-gateway
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./proto:/app/proto:ro
-    networks:
-      - scidist-net
-    depends_on:
-      - storage-node-1
-      - storage-node-2
-      - metadata-service
-  
-  classifier-service:
-    build: 
-      context: ./services/classifier-service
-      dockerfile: Dockerfile
-    container_name: classifier-service
-    ports:
-      - "8000:8000" # Lo exponemos para probarlo localmente
-    networks:
-      - scidist-net
-    deploy:
-      resources:
-        limits:
-          memory: 3G # Evita que Hugging Face consuma toda la RAM
-
-
-networks:
-  scidist-net:
-    driver: bridge
