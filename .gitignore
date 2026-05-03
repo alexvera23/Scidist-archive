@@ -32,6 +32,8 @@ services/api-gateway/temp_uploads/
 .env
 *.env
 
+.yml
+
 
 
 .DS_Store

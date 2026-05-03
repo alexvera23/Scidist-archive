@@ -1,21 +1,27 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const dgram = require('dgram');
+const cors = require('cors'); // <-- NUEVO: Vital para redes distribuidas
 require('dotenv').config();
 
-// Importamos nuestros nuevos modelos
 const { User, Theme, Subtheme, Article, StorageMap, NodeHealth, ReplicationTask, ActiveNode } = require('./models');
 
 const app = express();
+app.use(cors()); // <-- NUEVO: Permitir peticiones de otras IPs
 app.use(express.json());
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://mongo1:27017,mongo2:27017,mongo3:27017/scidist?replicaSet=rs0&serverSelectionTimeoutMS=5000';
+// Obligamos al sistema a usar la variable de entorno real
+const MONGO_URI = process.env.MONGO_URI;
+
+if (!MONGO_URI) {
+  console.error('❌ ERROR FATAL: MONGO_URI no está definida. Revisa tu archivo .env');
+  process.exit(1); // Detenemos el contenedor si no sabe a dónde conectarse
+}
 
 mongoose.connect(MONGO_URI)
   .then(async () => {
-    console.log(' Conectado al Replica Set de MongoDB');
+    console.log(' Conectado al Replica Set de MongoDB distribuido');
     try {
-      // INICIALIZACIÓN DE TODAS LAS COLECCIONES (Para evitar la Trampa de Transacciones)
       await User.createCollection();
       await Theme.createCollection();
       await Subtheme.createCollection();
@@ -26,10 +32,10 @@ mongoose.connect(MONGO_URI)
       await ActiveNode.createCollection();
       console.log(' Colecciones Multi-Tenant inicializadas');
     } catch (err) {
-      if (err.code !== 48) console.error(' Error creando colecciones:', err);
+      if (err.code !== 48) console.error('Error creando colecciones:', err);
     }
   })
-  .catch(err => console.error(' Error de conexión Mongo:', err));
+  .catch(err => console.error('❌ Error de conexión Mongo:', err.message));
 
 
 //  RUTA DE PRUEBA: Generar Usuario y Temas
@@ -258,10 +264,16 @@ app.post('/api/v1/nodes/register', async (req, res) => {
 // 2. Listar Nodos (Llamado por el Gateway y por otros nodos para replicación)
 app.get('/api/v1/nodes', async (req, res) => {
   try {
-    const nodes = await ActiveNode.find();
+    // 1. Consultar NodeHealth para saber quiénes están realmente vivos ("up")
+    const healthyNodes = await NodeHealth.find({ status: 'up' }).select('node_id');
+    const healthyIds = healthyNodes.map(n => n.node_id);
+
+    // 2. Buscar en ActiveNode solo los nodos que coincidan con esos IDs vivos
+    const nodes = await ActiveNode.find({ node_id: { $in: healthyIds } });
+    
     res.json(nodes);
   } catch (error) {
-    res.status(500).json({ error: 'Error al obtener nodos' });
+    res.status(500).json({ error: 'Error al obtener nodos activos' });
   }
 });
 
