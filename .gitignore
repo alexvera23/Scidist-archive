@@ -32,7 +32,7 @@ services/api-gateway/temp_uploads/
 .env
 *.env
 
-.yml
+docker-compose.yml
 
 
 
