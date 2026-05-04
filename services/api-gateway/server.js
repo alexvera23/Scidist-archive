@@ -400,5 +400,16 @@ app.get('/api/v1/themes/user/:id', async (req, res) => {
   }
 });
 
+// Puente para obtener los archivos del usuario
+app.get('/api/v1/files/user/:id', async (req, res) => {
+  try {
+    const response = await axios.get(`http://metadata-service:3001/api/v1/files/user/${req.params.id}`);
+    res.json(response.data);
+  } catch (error) {
+    const status = error.response ? error.response.status : 500;
+    res.status(status).json({ error: "Error de comunicación interna" });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`API Gateway escuchando en puerto ${PORT}`));
