@@ -1,3 +1,4 @@
+ 
  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
@@ -170,7 +171,7 @@
     .file-stack {
       position: relative; width: 340px; height: 420px;
     }
-    .file-card {
+    /* .file-card {
       position: absolute;
       width: 260px; height: 320px;
       background: var(--surface);
@@ -196,7 +197,7 @@
     .file-card-bar {
       width: 60%; height: 3px; background: var(--accent);
       margin-top: 0.5rem;
-    }
+    } */
 
     /* STATS STRIP */
     .stats-strip {
@@ -333,3 +334,4 @@
       .cta-section { margin: 0 1.5rem 4rem; padding: 2.5rem; grid-template-columns: 1fr; }
       footer { flex-direction: column; gap: 1rem; padding: 2rem 1.5rem; }
     }
+    

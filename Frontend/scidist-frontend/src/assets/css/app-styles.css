@@ -62,6 +62,10 @@ body {
   color: var(--accent);
 }
 
+.users i{
+  color: var(--gold);
+}
+
 /* SIDEBAR / OFFCANVAS */
 .custom-sidebar {
   background: var(--paper);
@@ -329,18 +333,24 @@ body {
 }
 
 
+
 /* FILES GRID (MODIFICADO PARA BOOTSTRAP ROW/COL) */
 .files-grid {
   background: transparent !important;
   border: none !important;
 }
 
-.file-card {
+.new-card {
   background: var(--paper);
   border: 1px solid var(--border);
   padding: 1.5rem;
   height: 100%;
-  transition: 0.3s ease;
+
+  /* 🔑 Estado base explícito (evita inclinaciones raras) */
+  transform: translateY(0) rotate(0deg) scale(1);
+  
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  position: relative; /* necesario para z-index */  
 }
 
 .file-card:hover {
