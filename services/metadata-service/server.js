@@ -6,6 +6,14 @@ require('dotenv').config();
 
 const { User, Theme, Subtheme, Article, StorageMap, NodeHealth, ReplicationTask, ActiveNode } = require('./models');
 
+// Simulación de catálogo en base de datos (Más adelante puede ser una colección en Mongo)
+const CATALOGO_CATEGORIAS = [
+  { id: 'redes', name: 'Redes', subthemes: ['Protocolos', 'Topologías', 'Seguridad'] },
+  { id: 'ia', name: 'Inteligencia Artificial', subthemes: ['Machine Learning', 'Deep Learning', 'NLP'] },
+  { id: 'dev', name: 'Desarrollo de Software', subthemes: ['Frontend', 'Backend', 'Arquitectura'] },
+  { id: 'linux', name: 'Linux', subthemes: ['Arch Linux', 'Ubuntu', 'Fedora'] }
+];
+
 const app = express();
 app.use(cors()); // <-- NUEVO: Permitir peticiones de otras IPs
 app.use(express.json());
@@ -332,6 +340,44 @@ app.delete('/api/v1/articles/:hash', async (req, res) => {
     res.status(500).json({ error: 'Error interno procesando el borrado' });
   } finally {
     session.endSession();
+  }
+});
+
+// 1. Endpoint para obtener las categorías disponibles
+app.get('/api/v1/categories/available', (req, res) => {
+  res.json(CATALOGO_CATEGORIAS);
+});
+
+// 2. Endpoint de Registro
+app.post('/api/v1/auth/register', async (req, res) => {
+  try {
+    const { username, email, password, preferences } = req.body;
+
+    // 1. Guardar el usuario principal
+    const newUser = new User({ username, email, password });
+    await newUser.save();
+
+    // 2. Crear las categorías y subcategorías elegidas en el registro
+    // preferences tiene este formato: { "Redes": ["Protocolos", "Seguridad"], "Linux": ["Fedora"] }
+    for (const [themeName, subthemes] of Object.entries(preferences)) {
+      const theme = new Theme({ name: themeName, owner_id: newUser._id });
+      await theme.save();
+
+      for (const subName of subthemes) {
+        const subtheme = new Subtheme({ 
+          name: subName, 
+          theme_id: theme._id, 
+          owner_id: newUser._id 
+        });
+        await subtheme.save();
+      }
+    }
+
+    console.log(` Nuevo usuario registrado: ${username}`);
+    res.status(201).json({ message: "Usuario y preferencias creados", userId: newUser._id });
+  } catch (error) {
+    console.error(" Error en registro:", error);
+    res.status(500).json({ error: "Error al registrar usuario: " + error.message });
   }
 });
 
