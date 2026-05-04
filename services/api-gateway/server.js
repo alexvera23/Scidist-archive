@@ -7,8 +7,11 @@ const protoLoader = require('@grpc/proto-loader');
 const path = require('path');
 const fs = require('fs');
 const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js'); // Usamos legacy para evitar problemas con Node 18
+const cors = require('cors');
 
 const app = express();
+app.use(express.json());
+app.use(cors());
 app.use(express.json());
 
 // 1. Configuración de gRPC Client
@@ -343,6 +346,37 @@ app.delete('/api/v1/delete/:hash', async (req, res) => {
   }
 });
 
+
+// ==========================================
+// NUEVAS RUTAS DE AUTENTICACIÓN Y CONFIG
+// ==========================================
+
+// Puente para obtener las categorías
+app.get('/api/v1/categories/available', async (req, res) => {
+  try {
+    // El Gateway le pregunta al Metadata Service (usando el nombre del contenedor interno de Docker)
+    const response = await axios.get('http://metadata-service:3001/api/v1/categories/available');
+    res.json(response.data);
+  } catch (error) {
+    console.error("[Gateway] Error obteniendo categorías:", error.message);
+    res.status(500).json({ error: "Error de comunicación interna" });
+  }
+});
+
+// Puente para el registro de usuarios
+app.post('/api/v1/auth/register', async (req, res) => {
+  try {
+    // El Gateway reenvía los datos del formulario al Metadata Service
+    const response = await axios.post('http://metadata-service:3001/api/v1/auth/register', req.body);
+    res.status(response.status).json(response.data);
+  } catch (error) {
+    console.error("[Gateway] Error en registro:", error.message);
+    // Reenviamos el error exacto que nos dio el Metadata
+    const status = error.response ? error.response.status : 500;
+    const data = error.response ? error.response.data : { error: "Error de comunicación interna" };
+    res.status(status).json(data);
+  }
+});
 
 
 const PORT = process.env.PORT || 3000;

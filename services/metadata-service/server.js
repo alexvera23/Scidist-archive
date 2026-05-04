@@ -11,7 +11,8 @@ const CATALOGO_CATEGORIAS = [
   { id: 'redes', name: 'Redes', subthemes: ['Protocolos', 'Topologías', 'Seguridad'] },
   { id: 'ia', name: 'Inteligencia Artificial', subthemes: ['Machine Learning', 'Deep Learning', 'NLP'] },
   { id: 'dev', name: 'Desarrollo de Software', subthemes: ['Frontend', 'Backend', 'Arquitectura'] },
-  { id: 'linux', name: 'Linux', subthemes: ['Arch Linux', 'Ubuntu', 'Fedora'] }
+  { id: 'linux', name: 'Linux', subthemes: ['Arch Linux', 'Ubuntu', 'Fedora'] },
+  { id: 'General', name: 'General', subthemes: ['General']}
 ];
 
 const app = express();
@@ -43,7 +44,7 @@ mongoose.connect(MONGO_URI)
       if (err.code !== 48) console.error('Error creando colecciones:', err);
     }
   })
-  .catch(err => console.error('❌ Error de conexión Mongo:', err.message));
+  .catch(err => console.error(' Error de conexión Mongo:', err.message));
 
 
 //  RUTA DE PRUEBA: Generar Usuario y Temas
@@ -366,7 +367,7 @@ app.post('/api/v1/auth/register', async (req, res) => {
       for (const subName of subthemes) {
         const subtheme = new Subtheme({ 
           name: subName, 
-          theme_id: theme._id, 
+          parent_theme_id: theme._id, 
           owner_id: newUser._id 
         });
         await subtheme.save();
