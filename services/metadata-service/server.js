@@ -404,7 +404,7 @@ app.post('/api/v1/auth/register', async (req, res) => {
       }
     }
 
-    res.status(201).json({ message: "Usuario y estructura de carpetas creada", userId: newUser._id });
+    res.status(201).json({ message: "Usuario y estructura de carpetas creada: ", userId: newUser._id });
   } catch (error) {
     res.status(500).json({ error: "Error en el registro: " + error.message });
   }
