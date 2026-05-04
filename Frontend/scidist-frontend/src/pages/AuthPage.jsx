@@ -6,6 +6,7 @@ import '../assets/css/login-styles.css';
 
 export default function AuthPage() {
   const navigate = useNavigate();
+  
   const [activeTab, setActiveTab] = useState('login');
 
   // Estados de formularios
@@ -76,19 +77,31 @@ export default function AuthPage() {
     });
   };
 
-  const handleLoginSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const response = await api.post('/auth/login', loginData);
-      if (response.status === 200) {
-        localStorage.setItem('token', response.data.token);
-        navigate('/dashboard');
-      }
-    } catch (error) {
-      console.error('Error en login:', error);
-      alert('Credenciales incorrectas o servidor no disponible.');
-    }
+const handleLoginSubmit = async (e) => {
+  e.preventDefault();
+  
+  // Payload simplificado solo con lo necesario para validar
+  const payload = {
+    email: loginData.email,
+    password: loginData.password
   };
+
+  try {
+    const response = await api.post('/auth/login', payload);
+    
+    if (response.status === 200) {
+      // 1. Guardamos la persistencia básica en el navegador
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+      
+      // 2. Redirigimos al Dashboard (la antigua app.html)
+      alert('Inicio de sesion exitoso')
+      navigate('/dashboard'); 
+    }
+  } catch (error) {
+    console.error('Error en login:', error);
+    alert(error.response?.data?.error || 'Credenciales incorrectas');
+  }
+};
 
   const handleRegisterSubmit = async (e) => {
     e.preventDefault();
