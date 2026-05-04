@@ -346,7 +346,7 @@ app.delete('/api/v1/delete/:hash', async (req, res) => {
   }
 });
 
-<<<<<<< HEAD
+
 // ==========================================
 // NUEVAS RUTAS DE AUTENTICACIÓN Y CONFIG
 // ==========================================
@@ -377,9 +377,7 @@ app.post('/api/v1/auth/register', async (req, res) => {
     res.status(status).json(data);
   }
 });
-=======
 
->>>>>>> c258484230f00ce820afc8d1d481210d70cb2d4a
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`API Gateway escuchando en puerto ${PORT}`));
