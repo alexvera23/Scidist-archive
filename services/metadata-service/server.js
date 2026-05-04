@@ -410,5 +410,37 @@ app.post('/api/v1/auth/register', async (req, res) => {
   }
 });
 
+
+//Endpoint para el inicio de sesion 
+app.post('/api/v1/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // 1. Buscar usuario por email
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(401).json({ error: "Credenciales inválidas" });
+    }
+
+    // 2. Validar contraseña (Comparación simple por ahora)
+    if (user.password !== password) {
+      return res.status(401).json({ error: "Credenciales inválidas" });
+    }
+
+    // 3. Responder con datos básicos del usuario
+    console.log(` Sesión iniciada: ${user.username}`);
+    res.json({
+      message: "Login exitoso",
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Error en el servidor durante el login" });
+  }
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(` Metadata Service escuchando en puerto ${PORT}`));
