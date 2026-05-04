@@ -358,13 +358,43 @@ app.post('/api/v1/auth/register', async (req, res) => {
     const newUser = new User({ username, email, password });
     await newUser.save();
 
-    // 2. Crear las categorías y subcategorías elegidas en el registro
+    // 2. creando la categoria General por defecto
+     const generalTheme = new Theme({ 
+      name: 'General', 
+      owner_id: newUser._id 
+    });
+    await generalTheme.save();
+
+    // Crear su subcategoría "Otros" interna
+    const generalOthers = new Subtheme({
+      name: 'Otros',
+      parent_theme_id: generalTheme._id,
+      owner_id: newUser._id
+    });
+    await generalOthers.save();
+
+    // 3. Crear las categorías y subcategorías elegidas en el registro
     // preferences tiene este formato: { "Redes": ["Protocolos", "Seguridad"], "Linux": ["Fedora"] }
     for (const [themeName, subthemes] of Object.entries(preferences)) {
+      // Evitamos duplicar si el usuario de alguna forma intentó crear "General"
+      if (themeName.toLowerCase() === 'general') continue;
+
       const theme = new Theme({ name: themeName, owner_id: newUser._id });
       await theme.save();
 
+      // 1. Crear subcategoría "Otros" por defecto para CADA categoría elegida
+      const defaultSub = new Subtheme({
+        name: 'Otros',
+        parent_theme_id: theme._id,
+        owner_id: newUser._id
+      });
+      await defaultSub.save();
+
+      // 2. Crear las subcategorías específicas que eligió el usuario
       for (const subName of subthemes) {
+        // Evitamos crear "Otros" dos veces si ya estaba en su lista
+        if (subName.toLowerCase() === 'otros') continue;
+
         const subtheme = new Subtheme({ 
           name: subName, 
           parent_theme_id: theme._id, 
@@ -374,11 +404,9 @@ app.post('/api/v1/auth/register', async (req, res) => {
       }
     }
 
-    console.log(` Nuevo usuario registrado: ${username}`);
-    res.status(201).json({ message: "Usuario y preferencias creados", userId: newUser._id });
+    res.status(201).json({ message: "Usuario y estructura de carpetas creada", userId: newUser._id });
   } catch (error) {
-    console.error(" Error en registro:", error);
-    res.status(500).json({ error: "Error al registrar usuario: " + error.message });
+    res.status(500).json({ error: "Error en el registro: " + error.message });
   }
 });
 
