@@ -1,8 +1,8 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import AppLayout from '../components/layout/AppLayout';
 // Importa los helpers (deberás crearlos o ajustar la ruta)
-import { getIconForCategory, getFileIcon } from '../utils/helpers';
-
+import { getIconForCategory, getFileIcon, formatBytes, formatDate } from '../utils/helpers';
+import api from '../api/axiosConfig';
 // Datos de prueba (luego vendrán del backend)
 const MOCK_FILES = [
   { id: 1, name: 'Arquitectura_P2P.pdf', size: '2.4 MB', date: '04 May 2026', category: 'Redes', subcategory: 'Topologías' },
@@ -17,40 +17,63 @@ export default function Dashboard() {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
 
+  // NUEVO: Estados para los archivos reales
+  const [files, setFiles] = useState([]);
+  const [isLoadingFiles, setIsLoadingFiles] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0); // Llave para forzar la recarga de la galería
+
+  useEffect(() => {
+    const fetchFiles = async () => {
+      setIsLoadingFiles(true);
+      try {
+        // Recuperamos el ID del usuario actual
+        const storedUser = JSON.parse(localStorage.getItem('user'));
+        if (!storedUser) return;
+
+        const response = await api.get(`/files/user/${storedUser.id}`);
+        setFiles(response.data);
+      } catch (error) {
+        console.error("Error al cargar los archivos:", error);
+      } finally {
+        setIsLoadingFiles(false);
+      }
+    };
+
+    fetchFiles();
+  }, [refreshKey]);
+
   // 1. Calcular conteos para los badges del Sidebar
   const fileCounts = useMemo(() => {
-    const counts = { todos: MOCK_FILES.length };
-    MOCK_FILES.forEach(file => {
+    const counts = { 'todos': files.length };
+    files.forEach(file => {
       counts[file.category] = (counts[file.category] || 0) + 1;
       counts[file.subcategory] = (counts[file.subcategory] || 0) + 1;
     });
     return counts;
-  }, []);
+  }, [files]);
 
   // 2. Filtrar archivos según la categoría/subcategoría seleccionada
   const filteredFiles = useMemo(() => {
-    if (currentFilter === 'todos') return MOCK_FILES;
-    return MOCK_FILES.filter(file =>
+    if (currentFilter === 'todos') return files;
+    return files.filter(file => 
       file.category === currentFilter || file.subcategory === currentFilter
     );
-  }, [currentFilter]);
+  }, [currentFilter, files]);
 
   // 3. Estadísticas reales basadas en los archivos totales (o filtrados si prefieres)
-  const stats = useMemo(() => {
-    const total = MOCK_FILES.length;
-    const areas = new Set(MOCK_FILES.map(f => f.category)).size;
-    const totalSizeMB = MOCK_FILES.reduce((acc, f) => {
-      const size = parseFloat(f.size);
-      return acc + (f.size.includes('MB') ? size : size / 1024);
-    }, 0);
-    const types = new Set(MOCK_FILES.map(f => f.name.split('.').pop())).size;
+const stats = useMemo(() => {
+    const totalSize = files.reduce((acc, file) => acc + (Number(file.size) || 0), 0);
+    const uniqueTypes = new Set(files.map(f => f.name.split('.').pop().toLowerCase())).size;
+    const uniqueAreas = new Set(files.map(f => f.category)).size;
+
     return {
-      total,
-      areas,
-      size: `${totalSizeMB.toFixed(1)} MB`,
-      types
+      total: files.length,
+      areas: uniqueAreas,
+      size: formatBytes(totalSize),
+      types: uniqueTypes
     };
-  }, []);
+  }, [files]);
 
   // Manejadores Drag & Drop (igual que antes)
   const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
@@ -63,9 +86,42 @@ export default function Dashboard() {
       // Aquí irá la lógica de subida al backend
     }
   };
-  const handleFiles = (files) => {
-    console.log("Archivos seleccionados:", files);
-  };
+const handleFiles = async (selectedFiles) => {
+  const storedUser = JSON.parse(localStorage.getItem('user'));
+  if (!storedUser) {
+    alert("Sesión expirada. Por favor, inicia sesión de nuevo.");
+    return;
+  }
+
+  setIsUploading(true);
+
+  const filesArray = Array.from(selectedFiles);
+
+  for (const file of filesArray) {
+    const formData = new FormData();
+    formData.append('file', file);
+    //  Ya NO se agrega 'owner_id' al formData
+
+    try {
+      const response = await api.post('/api/v1/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          'x-user-id': storedUser.id   //  Cabecera obligatoria
+        }
+      });
+      console.log(` ${file.name} subido con éxito`, response.data);
+      // Puedes mostrar la clasificación asignada automáticamente:
+      // response.data.classification
+    } catch (error) {
+      console.error(` Error al subir ${file.name}:`, error);
+      const errorMsg = error.response?.data?.error || error.message;
+      alert(`Fallo al subir ${file.name}: ${errorMsg}`);
+    }
+  }
+
+  setIsUploading(false);
+  setRefreshKey(prev => prev + 1);
+};
 
   // Futuro manejador para abrir el archivo
   const handleViewFile = (file) => {
@@ -114,29 +170,47 @@ export default function Dashboard() {
       </div>
 
       {/* DROP ZONE (sin cambios, solo adaptamos clases) */}
-      <div
-        className={`drop-zone mb-5 ${isDragging ? 'dragover' : ''}`}
+      <div 
+        className={`drop-zone mb-5 ${isDragging ? 'dragover' : ''} ${isUploading ? 'opacity-50' : ''}`} 
+        id="dropZone"
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        onClick={() => fileInputRef.current.click()}
+        onClick={() => !isUploading && fileInputRef.current.click()}
+        style={{ cursor: isUploading ? 'wait' : 'pointer' }}
       >
-        <i className="bi bi-cloud-arrow-up fs-1 mb-3 d-block" style={{ color: 'var(--accent)' }}></i>
-        <p className="drop-title">Arrastra tus Archivos</p>
-        <p className="drop-sub d-none d-sm-block">o haz clic para seleccionar</p>
-        <button type="button" className="btn-pick mt-3">Examinar</button>
-        <input
-          type="file"
-          ref={fileInputRef}
-          multiple
-          onChange={(e) => handleFiles(e.target.files)}
+        {isUploading ? (
+          <>
+            <div className="spinner-border text-primary mb-3" role="status" style={{ width: '3rem', height: '3rem' }}></div>
+            <p className="drop-title">Subiendo y clasificando...</p>
+            <p className="drop-sub text-muted">La Inteligencia Artificial está analizando tus archivos</p>
+          </>
+        ) : (
+          <>
+            <i className="bi bi-cloud-arrow-up fs-1 mb-3 d-block text-primary"></i>
+            <p className="drop-title">Arrastra tus Archivos</p>
+            <p className="drop-sub d-none d-sm-block text-muted">o haz clic para seleccionar</p>
+            <button type="button" className="btn btn-outline-primary mt-3 px-4 rounded-pill">Examinar</button>
+          </>
+        )}
+        <input 
+          type="file" 
+          ref={fileInputRef} 
+          multiple 
+          onChange={(e) => handleFiles(e.target.files)} 
           style={{ display: 'none' }}
+          disabled={isUploading}
         />
       </div>
 
       {/* GALERÍA DE ARCHIVOS */}
       <div id="filesContainer">
-        {filteredFiles.length === 0 ? (
+        {isLoadingFiles ? (
+          <div className="py-5 text-center text-muted">
+            <div className="spinner-border text-primary mb-3" role="status"></div>
+            <p>Recuperando archivos de la red distribuida...</p>
+          </div>
+        ) : filteredFiles.length === 0 ? (
           <div className="files-empty py-5 text-center" id="emptyState">
             <i className="bi bi-folder-x display-1 opacity-25 text-muted"></i>
             <p className="mt-3 text-muted">Aún no hay archivos en esta categoría</p>
@@ -145,20 +219,14 @@ export default function Dashboard() {
           <div className="row g-4 files-grid">
             {filteredFiles.map(file => (
               <div key={file.id} className="col-12 col-md-6 col-lg-4 col-xl-3">
-                
-                {/* 1. LA TARJETA AHORA ES CLIQUEABLE */}
                 <div 
-                  className="card h-100 shadow-sm border-0 file-card new-card" 
+                  className="card h-100 shadow-sm border-0 file-card" 
                   style={{ backgroundColor: 'var(--surface)', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.2s ease' }}
                   onClick={() => handleViewFile(file)}
                 >
                   <div className="card-body d-flex flex-column">
-                    
-                    {/* Ícono de tipo de archivo y Dropdown */}
                     <div className="mb-3 d-flex justify-content-between align-items-start">
                       <i className={`bi ${getFileIcon(file.name)}`} style={{ fontSize: '2rem' }}></i>
-                      
-                      {/* 2. STOP PROPAGATION: Aislamos el clic del menú */}
                       <div className="dropdown" onClick={(e) => e.stopPropagation()}>
                         <button className="btn btn-link text-muted p-0" data-bs-toggle="dropdown">
                           <i className="bi bi-three-dots-vertical fs-5"></i>
@@ -171,19 +239,18 @@ export default function Dashboard() {
                       </div>
                     </div>
                     
-                    {/* 3. ALINEACIÓN PERFECTA: Altura fija para la zona de texto */}
                     <div style={{ minHeight: '3.5rem' }}>
                       <h6 className="card-title fw-bold mb-1" style={{ color: 'var(--ink)', display: '-webkit-box', WebkitLineClamp: '2', WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                         {file.name}
                       </h6>
                     </div>
                     
+                    {/* AQUI APLICAMOS LOS HELPERS */}
                     <div className="text-muted small mb-3 d-flex justify-content-between">
-                      <span>{file.size}</span>
-                      <span>{file.date}</span>
+                      <span>{formatBytes(file.size)}</span>
+                      <span>{formatDate(file.date)}</span>
                     </div>
 
-                    {/* Badges al fondo (siempre alineados gracias al mt-auto) */}
                     <div className="mt-auto d-flex flex-wrap gap-1">
                       <span className="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle rounded-pill">
                         {file.category}
@@ -200,7 +267,6 @@ export default function Dashboard() {
           </div>
         )}
       </div>
-
     </AppLayout>
   );
 }

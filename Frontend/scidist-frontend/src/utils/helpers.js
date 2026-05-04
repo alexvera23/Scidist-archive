@@ -32,3 +32,20 @@ export const getFileIcon = (filename) => {
   
   return icons[ext] || 'bi-file-earmark text-muted';
 };
+
+// Convierte bytes a KB, MB, GB...
+export const formatBytes = (bytes, decimals = 2) => {
+  if (!+bytes) return '0 Bytes';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+};
+
+// Formatea la fecha ISO a algo como "04 May 2026"
+export const formatDate = (dateString) => {
+  if (!dateString) return 'Fecha desconocida';
+  const date = new Date(dateString);
+  return date.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
+};
