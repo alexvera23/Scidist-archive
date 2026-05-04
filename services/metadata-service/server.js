@@ -14,7 +14,7 @@ app.use(express.json());
 const MONGO_URI = process.env.MONGO_URI;
 
 if (!MONGO_URI) {
-  console.error('❌ ERROR FATAL: MONGO_URI no está definida. Revisa tu archivo .env');
+  console.error(' ERROR FATAL: MONGO_URI no está definida. Revisa tu archivo .env');
   process.exit(1); // Detenemos el contenedor si no sabe a dónde conectarse
 }
 
@@ -35,7 +35,7 @@ mongoose.connect(MONGO_URI)
       if (err.code !== 48) console.error('Error creando colecciones:', err);
     }
   })
-  .catch(err => console.error('❌ Error de conexión Mongo:', err.message));
+  .catch(err => console.error(' Error de conexión Mongo:', err.message));
 
 
 //  RUTA DE PRUEBA: Generar Usuario y Temas
