@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Dropdown, Form, Spinner } from 'react-bootstrap';
+import React, { useState, useEffect, useRef } from 'react';
+import { Spinner } from 'react-bootstrap';
 import api from '../api/axiosConfig';
 import { useNavigate } from 'react-router-dom';
 import '../assets/css/login-styles.css';
@@ -19,18 +19,33 @@ export default function AuthPage() {
   });
   const [selectedTopics, setSelectedTopics] = useState({});
 
-  // Estados para categorías dinámicas desde el backend
+  // Estados para categorías dinámicas
   const [availableCategories, setAvailableCategories] = useState([]);
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
 
-  // Obtener catálogo de categorías al montar el componente
+  // Estado para el dropdown personalizado
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // Cerrar dropdown al hacer clic fuera
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Obtener catálogo de categorías
   useEffect(() => {
     const fetchCategories = async () => {
       try {
         const response = await api.get('/categories/available');
         setAvailableCategories(response.data);
       } catch (error) {
-        console.error('Error obteniendo categorías del servidor:', error);
+        console.error('Error obteniendo categorías:', error);
       } finally {
         setIsLoadingCategories(false);
       }
@@ -38,14 +53,12 @@ export default function AuthPage() {
     fetchCategories();
   }, []);
 
-  // Handlers genéricos
   const handleLoginChange = (e) =>
     setLoginData({ ...loginData, [e.target.name]: e.target.value });
 
   const handleRegChange = (e) =>
     setRegData({ ...regData, [e.target.name]: e.target.value });
 
-  // Manejo de selección de sub‑temas
   const handleToggleSubtheme = (themeName, subtheme) => {
     setSelectedTopics((prev) => {
       const currentSubthemes = prev[themeName] || [];
@@ -63,15 +76,12 @@ export default function AuthPage() {
     });
   };
 
-  // Envío del formulario de login
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
     try {
       const response = await api.post('/auth/login', loginData);
       if (response.status === 200) {
-        // Guardar token o sesión (según tu backend)
         localStorage.setItem('token', response.data.token);
-        // Redirigir al dashboard
         navigate('/dashboard');
       }
     } catch (error) {
@@ -80,26 +90,22 @@ export default function AuthPage() {
     }
   };
 
-  // Envío del formulario de registro
   const handleRegisterSubmit = async (e) => {
     e.preventDefault();
-
     if (regData.password !== regData.confirmPassword) {
       alert('Las contraseñas no coinciden');
       return;
     }
-
     const payload = {
       username: `${regData.firstName} ${regData.lastName}`,
       email: regData.email,
       password: regData.password,
       preferences: selectedTopics,
     };
-
     try {
       const response = await api.post('/auth/register', payload);
       if (response.status === 201) {
-        alert('¡Cuenta creada exitosamente! Tu archivo ya está preparado.');
+        alert('¡Cuenta creada exitosamente!');
         setActiveTab('login');
         setRegData({
           firstName: '',
@@ -112,13 +118,19 @@ export default function AuthPage() {
       }
     } catch (error) {
       console.error('Error en registro:', error);
-      alert('Hubo un problema al crear la cuenta. Verifica que el servidor esté encendido.');
+      alert('Hubo un problema al crear la cuenta.');
     }
   };
 
+  // Contador de temas seleccionados
+  const totalSelected = Object.keys(selectedTopics).reduce(
+    (acc, key) => acc + selectedTopics[key].length,
+    0
+  );
+
   return (
     <div className="login-container">
-      {/* PANEL IZQUIERDO (Branding) */}
+      {/* PANEL IZQUIERDO */}
       <div className="left-panel">
         <a href="/" className="panel-logo">
           Scidist<span>-Archive</span>
@@ -149,9 +161,8 @@ export default function AuthPage() {
         </div>
       </div>
 
-      {/* PANEL DERECHO (Formularios) */}
+      {/* PANEL DERECHO */}
       <div className="right-panel">
-        {/* PESTAÑAS */}
         <div className="form-tabs">
           <button
             className={`tab-btn ${activeTab === 'login' ? 'active' : ''}`}
@@ -169,12 +180,11 @@ export default function AuthPage() {
           </button>
         </div>
 
-        {/* ========= FORMULARIO DE LOGIN ========= */}
+        {/* LOGIN */}
         {activeTab === 'login' && (
           <form className="form-panel active" onSubmit={handleLoginSubmit}>
             <h3 className="form-title">Bienvenido de Vuelta</h3>
             <p className="form-subtitle">Ingresa tus credenciales para continuar</p>
-
             <div className="field-group">
               <label>Correo Electrónico</label>
               <input
@@ -186,7 +196,6 @@ export default function AuthPage() {
                 required
               />
             </div>
-
             <div className="field-group">
               <label>Contraseña</label>
               <input
@@ -198,18 +207,13 @@ export default function AuthPage() {
                 required
               />
             </div>
-
             <div className="checkbox-field">
               <input type="checkbox" id="rememberMe" />
               <label htmlFor="rememberMe">Recordar mi sesión en este dispositivo</label>
             </div>
-
-            <button type="submit" className="btn-submit">
-              Ingresar
-            </button>
-
+            <button type="submit" className="btn-submit">Ingresar</button>
             <div className="divider">o</div>
-            <p style={{ fontSize: '0.85rem', color: 'var(--muted)', textAlign: 'center' }}>
+            <p className="switch-prompt">
               ¿No tienes cuenta?{' '}
               <a
                 href="#register"
@@ -217,7 +221,6 @@ export default function AuthPage() {
                   e.preventDefault();
                   setActiveTab('register');
                 }}
-                style={{ color: 'var(--ink)', fontWeight: '500' }}
               >
                 Regístrate gratis
               </a>
@@ -225,7 +228,7 @@ export default function AuthPage() {
           </form>
         )}
 
-        {/* ========= FORMULARIO DE REGISTRO ========= */}
+        {/* REGISTRO */}
         {activeTab === 'register' && (
           <form className="form-panel active" onSubmit={handleRegisterSubmit}>
             <h3 className="form-title">Crear Cuenta</h3>
@@ -292,22 +295,23 @@ export default function AuthPage() {
               />
             </div>
 
-            {/* DROPDOWN DINÁMICO DE CATEGORÍAS */}
-            <div className="field-group mb-4">
+            {/* DROPDOWN PERSONALIZADO */}
+            <div className="field-group custom-dropdown-group" ref={dropdownRef}>
               <label>Elige tus intereses principales</label>
-              <Dropdown autoClose="outside" className="w-100">
-                <Dropdown.Toggle
-                  variant="light"
-                  className="w-100 text-start d-flex justify-content-between align-items-center"
-                  style={{ border: '1px solid #e2e8f0', backgroundColor: '#f8fafc', color: '#64748b' }}
-                >
-                  Seleccionar Categorías...
-                </Dropdown.Toggle>
+              <div
+                className={`custom-dropdown-toggle ${dropdownOpen ? 'open' : ''}`}
+                onClick={() => setDropdownOpen(!dropdownOpen)}
+              >
+                <span className="dropdown-text">
+                  {totalSelected === 0
+                    ? 'Seleccionar categorías...'
+                    : `${totalSelected} tema${totalSelected !== 1 ? 's' : ''} seleccionado${totalSelected !== 1 ? 's' : ''}`}
+                </span>
+                <i className={`bi bi-chevron-${dropdownOpen ? 'up' : 'down'}`}></i>
+              </div>
 
-                <Dropdown.Menu
-                  className="w-100 p-3 shadow-sm"
-                  style={{ maxHeight: '200px', overflowY: 'auto' }}
-                >
+              {dropdownOpen && (
+                <div className="custom-dropdown-menu">
                   {isLoadingCategories ? (
                     <div className="text-center py-3">
                       <Spinner animation="border" variant="primary" size="sm" />
@@ -315,29 +319,28 @@ export default function AuthPage() {
                     </div>
                   ) : (
                     availableCategories.map((cat) => (
-                      <div key={cat.id} className="mb-3">
-                        <h6 className="dropdown-header px-0 text-dark fw-bold border-bottom pb-1 mb-2">
-                          {cat.name}
-                        </h6>
-                        {cat.subthemes.map((sub) => (
-                          <Form.Check
-                            key={sub}
-                            type="checkbox"
-                            id={`check-${cat.id}-${sub}`}
-                            label={sub}
-                            onChange={() => handleToggleSubtheme(cat.name, sub)}
-                            checked={selectedTopics[cat.name]?.includes(sub) || false}
-                            className="ms-2 custom-checkbox"
-                          />
-                        ))}
+                      <div key={cat.id} className="dropdown-category">
+                        <div className="dropdown-category-title">{cat.name}</div>
+                        <div className="dropdown-subthemes">
+                          {cat.subthemes.map((sub) => (
+                            <label key={sub} className="custom-checkbox-label">
+                              <input
+                                type="checkbox"
+                                checked={selectedTopics[cat.name]?.includes(sub) || false}
+                                onChange={() => handleToggleSubtheme(cat.name, sub)}
+                              />
+                              <span>{sub}</span>
+                            </label>
+                          ))}
+                        </div>
                       </div>
                     ))
                   )}
-                </Dropdown.Menu>
-              </Dropdown>
-              <p className="field-msg" style={{ color: 'var(--primary-color)' }}>
-                {Object.keys(selectedTopics).length} temas seleccionados.
-              </p>
+                </div>
+              )}
+              <div className="field-msg ">
+                {totalSelected} tema{totalSelected !== 1 ? 's' : ''} seleccionado{totalSelected !== 1 ? 's' : ''}.
+              </div>
             </div>
 
             <div className="checkbox-field">
@@ -347,12 +350,9 @@ export default function AuthPage() {
               </label>
             </div>
 
-            <button type="submit" className="btn-submit">
-              Crear Cuenta
-            </button>
-
+            <button type="submit" className="btn-submit">Crear Cuenta</button>
             <div className="divider">o</div>
-            <p style={{ fontSize: '0.85rem', color: 'var(--muted)', textAlign: 'center' }}>
+            <p className="switch-prompt">
               ¿Ya tienes cuenta?{' '}
               <a
                 href="#login"
@@ -360,7 +360,6 @@ export default function AuthPage() {
                   e.preventDefault();
                   setActiveTab('login');
                 }}
-                style={{ color: 'var(--ink)', fontWeight: '500' }}
               >
                 Inicia sesión
               </a>

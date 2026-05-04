@@ -187,21 +187,213 @@
     .toast.show { transform: translateY(0); }
     .toast.success { border-left-color: var(--ok); }
     .toast.error { border-left-color: var(--err); }
+/* ========== DROPDOWN PERSONALIZADO ========== */
+  .custom-dropdown-group {
+    position: relative;
+  }
 
+  .custom-dropdown-toggle {
+    width: 100%;
+    background: var(--surface);
+    border: 1.5px solid transparent;
+    padding: 0.85rem 1rem;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.95rem;
+    color: var(--ink);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
 
+  .custom-dropdown-toggle:hover {
+    background: #fff;
+  }
 
-    @media (max-width: 800px) {
-      .login-container {
-        grid-template-columns: 1fr;
-        overflow: auto;
-      }
+  .custom-dropdown-toggle.open {
+    border-color: var(--ink);
+    background: #fff;
+  }
 
-      .left-panel {
-        display: none;
-      }
+  .dropdown-text {
+    color: var(--muted);
+  }
 
-      .right-panel {
-        padding: 2rem 1.5rem;
-        min-height: 100vh;
-      }
-    }
+  .custom-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 5px);
+    left: 0;
+    right: 0;
+    background: #fff;
+    border: 1px solid rgba(10, 10, 10, 0.12);
+    max-height: 280px;
+    overflow-y: auto;
+    z-index: 1000;
+    padding: 1rem;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+  }
+
+  .dropdown-category {
+    margin-bottom: 1.2rem;
+  }
+
+  .dropdown-category:last-child {
+    margin-bottom: 0;
+  }
+
+  .dropdown-category-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    border-bottom: 1px solid rgba(10, 10, 10, 0.08);
+    padding-bottom: 0.4rem;
+    margin-bottom: 0.6rem;
+  }
+
+  .dropdown-subthemes {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .custom-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.85rem;
+    color: var(--ink);
+    cursor: pointer;
+    padding: 0.2rem 0;
+  }
+
+  .custom-checkbox-label input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--ink);
+    cursor: pointer;
+  }
+
+  .custom-checkbox-label span {
+    flex: 1;
+  }
+
+  /* Scroll personalizado para el menú */
+  .custom-dropdown-menu::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .custom-dropdown-menu::-webkit-scrollbar-track {
+    background: var(--surface);
+  }
+
+  .custom-dropdown-menu::-webkit-scrollbar-thumb {
+    background: var(--muted);
+  }
+
+  /* Ajuste para el texto de cambio entre login/registro */
+  .switch-prompt {
+    font-size: 0.85rem;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  .switch-prompt a {
+    color: var(--ink);
+    font-weight: 500;
+    text-decoration: none;
+    border-bottom: 1px dotted transparent;
+    transition: border-color 0.2s;
+  }
+
+  .switch-prompt a:hover {
+    border-bottom-color: var(--accent);
+  }
+
+  /* ========== RESPONSIVE MEJORADO ========== */
+@media (max-width: 800px) {
+  .login-container {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+  .left-panel {
+    display: none;
+  }
+  .right-panel {
+    padding: 2rem 1.2rem;
+    min-height: 100vh;
+    justify-content: flex-start;
+  }
+  .form-tabs {
+    margin-bottom: 1.5rem;
+  }
+  .tab-btn {
+    padding: 0.6rem 1rem;
+    font-size: 0.75rem;
+  }
+  .form-title {
+    font-size: 2rem;
+  }
+  .form-subtitle {
+    font-size: 0.85rem;
+    margin-bottom: 1.5rem;
+  }
+  .field-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .field-group input,
+  .custom-dropdown-toggle {
+    padding: 0.75rem 1rem;
+  }
+  .custom-dropdown-menu {
+    max-height: 240px;
+    position: static;
+    margin-top: 0.5rem;
+  }
+  .custom-checkbox-label {
+    font-size: 0.8rem;
+    padding: 0.3rem 0;
+    min-height: 36px;
+  }
+  .btn-submit {
+    padding: 0.85rem;
+  }
+  .divider {
+    margin: 1.2rem 0;
+  }
+  .switch-prompt {
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .right-panel {
+    padding: 1.5rem 1rem;
+  }
+  .tab-btn {
+    padding: 0.5rem 0.8rem;
+    font-size: 0.7rem;
+  }
+  .form-title {
+    font-size: 1.8rem;
+  }
+  .custom-dropdown-menu {
+    padding: 0.8rem;
+  }
+  .dropdown-category-title {
+    font-size: 0.65rem;
+  }
+}
+
+.custom-dropdown-toggle {
+  cursor: pointer;
+  user-select: none;
+}
+.custom-dropdown-toggle:active {
+  background-color: var(--surface);
+}
