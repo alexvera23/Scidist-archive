@@ -442,5 +442,36 @@ app.post('/api/v1/auth/login', async (req, res) => {
   }
 });
 
+// GET: Obtener el árbol de categorías de un usuario
+app.get('/api/v1/themes/user/:owner_id', async (req, res) => {
+  try {
+    const { owner_id } = req.params;
+    
+    // 1. Buscamos todos los temas y subtemas del usuario
+    const themes = await Theme.find({ owner_id }).lean();
+    const subthemes = await Subtheme.find({ owner_id }).lean();
+
+    // 2. Construimos la estructura anidada para React
+    const structuredData = themes.map(theme => {
+      // Filtramos los subtemas que pertenecen a este tema específico
+      const relatedSubthemes = subthemes
+        .filter(sub => sub.parent_theme_id.toString() === theme._id.toString())
+        .map(sub => sub.name);
+
+      return {
+        id: theme._id,
+        name: theme.name,
+        subthemes: relatedSubthemes,
+        count: 0 // Aquí luego conectaremos el conteo real de archivos
+      };
+    });
+
+    res.json(structuredData);
+  } catch (error) {
+    console.error("Error obteniendo categorías:", error);
+    res.status(500).json({ error: "Error al cargar las categorías del usuario" });
+  }
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(` Metadata Service escuchando en puerto ${PORT}`));
