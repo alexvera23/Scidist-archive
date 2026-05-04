@@ -1,0 +1,369 @@
+/* VARIABLES GLOBALES */
+:root {
+  --ink: #0a0a0a; 
+  --paper: #f4f0e8; 
+  --accent: #e63946;
+  --gold: #c9a84c; 
+  --muted: #7a7065; 
+  --surface: #ede9df;
+  --border: rgba(10,10,10,0.12);
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 300;
+  overflow-x: hidden;
+}
+
+/* NAVBAR PERSONALIZADO */
+.custom-navbar {
+  background: rgba(244,240,232,0.9);
+  backdrop-filter: blur(15px);
+  border-bottom: 1px solid var(--border);
+  padding: 0.8rem 0;
+}
+
+.brand-logo {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.8rem;
+  letter-spacing: 0.1em;
+  color: var(--ink) !important;
+  text-decoration: none;
+}
+
+.brand-logo span.accent { color: var(--accent); }
+
+.Titulo{
+    color: var(--accent);
+}
+
+.btn-menu {
+  border: none;
+  background: none;
+  color: var(--ink);
+  padding: 0;
+}
+
+.btn-logout {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  border: 1.5px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  padding: 0.5rem 1.2rem;
+  transition: 0.3s;
+}
+
+.btn-logout:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* SIDEBAR / OFFCANVAS */
+.custom-sidebar {
+  background: var(--paper);
+  border-right: 1px solid var(--border);
+  width: 320px !important;
+}
+
+.offcanvas.custom-sidebar {
+  background: var(--paper);
+}
+
+.offcanvas-header {
+  padding: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.offcanvas-header .btn-close {
+  background-color: var(--muted);
+  opacity: 0.5;
+}
+
+.offcanvas-header .btn-close:hover {
+  opacity: 1;
+}
+
+.sidebar-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 1rem 0;
+}
+
+/* Items principales del sidebar */
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1.5rem;
+  border: none;
+  background: transparent;
+  width: 100%;
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-family: 'DM Sans', sans-serif;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  text-align: left;
+  border-left: 3px solid transparent;
+}
+
+.sidebar-item:hover {
+  background: var(--surface);
+  border-left-color: var(--gold);
+}
+
+.sidebar-item.active {
+  background: var(--ink);
+  color: var(--paper);
+  border-left-color: var(--accent);
+}
+
+.sidebar-item.active .badge {
+  background: var(--accent);
+  color: white;
+}
+
+.sidebar-item.active i {
+  color: var(--paper);
+}
+
+/* Category Header */
+.category-header {
+  font-weight: 500;
+}
+
+/* Subcategorías */
+.subcategories {
+  margin-left: 1.5rem;
+  border-left: 1px solid var(--border);
+}
+
+.sub-item {
+  padding: 0.65rem 1.5rem 0.65rem 3rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.sub-item:hover {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.sub-item.active {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.sub-item.active .badge-sub {
+  background: var(--accent);
+  color: white;
+}
+
+/* Badges */
+.badge {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem;
+  font-weight: 400;
+  background: var(--surface);
+  color: var(--muted);
+  border-radius: 0;
+  padding: 0.25rem 0.6rem;
+  transition: all 0.2s ease;
+}
+
+.badge-sub {
+  background: transparent;
+  border: 1px solid var(--border);
+}
+
+/* Iconos de transición */
+.transition-icon {
+  transition: transform 0.2s ease;
+  font-size: 0.8rem;
+}
+
+/* Grupo de categorías */
+.category-group {
+  margin-bottom: 0.25rem;
+}
+
+/* scrollbar personalizada para el sidebar */
+.custom-sidebar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-sidebar::-webkit-scrollbar-track {
+  background: var(--surface);
+}
+
+.custom-sidebar::-webkit-scrollbar-thumb {
+  background: var(--muted);
+}
+
+.custom-sidebar::-webkit-scrollbar-thumb:hover {
+  background: var(--gold);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .custom-sidebar {
+    width: 280px !important;
+  }
+  
+  .sidebar-item {
+    padding: 0.75rem 1.2rem;
+  }
+  
+  .sub-item {
+    padding-left: 2.5rem;
+  }
+}
+
+/* Animación de entrada para subcategorías */
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.subcategories {
+  animation: slideDown 0.2s ease forwards;
+}
+
+/* MAIN CONTENT */
+.main-header h1 {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(2.5rem, 5vw, 4rem);
+  line-height: 0.9;
+}
+
+/* STATS ROW */
+.stats-row {
+  border: 1px solid var(--border);
+  background: var(--border);
+}
+
+.stat-card {
+  background: var(--paper);
+  padding: 2rem 1.5rem;
+  border: 0.5px solid var(--border);
+  transition: 0.3s;
+}
+
+.stat-card:hover { background: var(--surface); }
+
+.stat-card-num {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 2.2rem;
+  display: block;
+}
+
+.stat-card-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+/* DROP ZONE */
+.drop-zone {
+  border: 2px dashed var(--border);
+  background: var(--surface);
+  padding: 3rem 1.5rem;
+  text-align: center;
+  transition: 0.3s;
+  cursor: pointer;
+}
+
+.drop-zone.dragover {
+  border-color: var(--accent);
+  background: rgba(230,57,70,0.05);
+}
+
+/* Sobrescribir estilos de Bootstrap */
+.drop-zone .btn-outline-primary {
+  background: var(--ink) !important;
+  color: var(--paper) !important;
+  font-family: 'DM Mono', monospace !important;
+  font-size: 0.8rem !important;
+  padding: 0.6rem 2rem !important;
+  border-radius: 0 !important;
+  text-transform: uppercase !important;
+  border: none !important;
+  transition: all 0.3s ease !important;
+}
+
+.drop-zone .btn-outline-primary:hover {
+  background: var(--accent) !important;
+  color: var(--paper) !important;
+  transform: translateY(-2px);
+}
+
+.drop-zone .btn-outline-primary:active {
+  transform: translateY(0);
+}
+
+/* Estilo para el ícono */
+.drop-zone .bi-cloud-arrow-up {
+  color: var(--ink)!important;
+  font-size: 2.5rem!important;
+  margin-bottom: 1rem!important;
+}
+
+
+/* FILES GRID (MODIFICADO PARA BOOTSTRAP ROW/COL) */
+.files-grid {
+  background: transparent !important;
+  border: none !important;
+}
+
+.file-card {
+  background: var(--paper);
+  border: 1px solid var(--border);
+  padding: 1.5rem;
+  height: 100%;
+  transition: 0.3s ease;
+}
+
+.file-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.05);
+  background: white;
+}
+
+/*foooter*/
+ .footer-logo {
+      font-family: 'Bebas Neue', sans-serif; font-size: 1.2rem;
+      letter-spacing: 0.1em; color: var(--muted);
+    }
+    .footer-note { font-size: 0.75rem; color: var(--muted); letter-spacing: 0.05em; }
+
+
+/* BREAKPOINTS Y AJUSTES */
+@media (max-width: 576px) {
+  .main-header { text-align: center; }
+  .stats-row { margin-left: 0; margin-right: 0; }
+  .stat-card { padding: 1rem; }
+}
+
+/* Estilos de colores de áreas se mantienen igual... */
+.area-imagen { color: #1d6fa4; background: rgba(29,111,164,0.1); }
+/* ... (puedes copiar el resto de tus clases de colores aquí) */
