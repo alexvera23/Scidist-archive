@@ -86,6 +86,7 @@ const stats = useMemo(() => {
       // Aquí irá la lógica de subida al backend
     }
   };
+
 const handleFiles = async (selectedFiles) => {
   const storedUser = JSON.parse(localStorage.getItem('user'));
   if (!storedUser) {
@@ -94,24 +95,20 @@ const handleFiles = async (selectedFiles) => {
   }
 
   setIsUploading(true);
-
   const filesArray = Array.from(selectedFiles);
 
   for (const file of filesArray) {
     const formData = new FormData();
     formData.append('file', file);
-    //  Ya NO se agrega 'owner_id' al formData
 
     try {
-      const response = await api.post('/api/v1/upload', formData, {
+      const response = await api.post('/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
-          'x-user-id': storedUser.id   //  Cabecera obligatoria
+          'x-user-id': storedUser.id
         }
       });
       console.log(` ${file.name} subido con éxito`, response.data);
-      // Puedes mostrar la clasificación asignada automáticamente:
-      // response.data.classification
     } catch (error) {
       console.error(` Error al subir ${file.name}:`, error);
       const errorMsg = error.response?.data?.error || error.message;
