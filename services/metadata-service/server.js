@@ -474,27 +474,27 @@ app.get('/api/v1/themes/user/:owner_id', async (req, res) => {
 });
 
 // GET: Obtener todos los archivos de un usuario
+
 app.get('/api/v1/files/user/:owner_id', async (req, res) => {
   try {
     const { owner_id } = req.params;
     
-    // Asumiendo que tienes un modelo File. 
-    // Usamos .populate si guardaste el ID del tema/subtema en lugar del nombre directamente.
-    // Si guardas el nombre directo como String, puedes quitar los .populate()
-    const files = await File.find({ owner_id })
+    // 1. Buscamos usando tu modelo "Article"
+    // Filtrar por status: 'available' es una buena práctica para no mostrar archivos borrados o con error
+    const articles = await Article.find({ owner_id, status: 'available' })
       .populate('theme_id', 'name')
       .populate('subtheme_id', 'name')
       .lean();
 
-    // Formateamos los datos para que el Frontend los reciba tal como los espera
-    const formattedFiles = files.map(file => ({
-      id: file._id,
-      name: file.originalName || file.filename, // Depende de cómo lo llames en tu Schema
-      size: file.size, // Lo mandaremos en bytes y el Frontend lo formateará
-      date: file.uploadDate || file.createdAt, 
-      // Extraemos el nombre poblado, o asignamos "General" por defecto
-      category: file.theme_id?.name || 'General',
-      subcategory: file.subtheme_id?.name || 'Otros'
+    // 2. Mapeamos exactamente a los campos de tu ArticleSchema
+    const formattedFiles = articles.map(article => ({
+      id: article._id,
+      name: article.title || article.file_hash, // Usamos title, o el hash como respaldo
+      size: 0, //  Tu esquema no guarda el tamaño en bytes. Mandamos 0 por defecto para que no falle el frontend.
+      date: article.createdAt, // Lo provee el { timestamps: true } de tu esquema
+      category: article.theme_id?.name || 'General',
+      subcategory: article.subtheme_id?.name || 'Otros',
+      hash: article.file_hash // Agregamos el hash porque lo necesitarás para la descarga
     }));
 
     res.json(formattedFiles);
