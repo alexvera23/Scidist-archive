@@ -404,9 +404,103 @@ app.post('/api/v1/auth/register', async (req, res) => {
       }
     }
 
-    res.status(201).json({ message: "Usuario y estructura de carpetas creada", userId: newUser._id });
+    res.status(201).json({ message: "Usuario y estructura de carpetas creada: ", userId: newUser._id });
   } catch (error) {
     res.status(500).json({ error: "Error en el registro: " + error.message });
+  }
+});
+
+
+//Endpoint para el inicio de sesion 
+app.post('/api/v1/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // 1. Buscar usuario por email
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(401).json({ error: "Credenciales inválidas" });
+    }
+
+    // 2. Validar contraseña (Comparación simple por ahora)
+    if (user.password !== password) {
+      return res.status(401).json({ error: "Credenciales inválidas" });
+    }
+
+    // 3. Responder con datos básicos del usuario
+    console.log(` Sesión iniciada: ${user.username}`);
+    res.json({
+      message: "Login exitoso",
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Error en el servidor durante el login" });
+  }
+});
+
+// GET: Obtener el árbol de categorías de un usuario
+app.get('/api/v1/themes/user/:owner_id', async (req, res) => {
+  try {
+    const { owner_id } = req.params;
+    
+    // 1. Buscamos todos los temas y subtemas del usuario
+    const themes = await Theme.find({ owner_id }).lean();
+    const subthemes = await Subtheme.find({ owner_id }).lean();
+
+    // 2. Construimos la estructura anidada para React
+    const structuredData = themes.map(theme => {
+      // Filtramos los subtemas que pertenecen a este tema específico
+      const relatedSubthemes = subthemes
+        .filter(sub => sub.parent_theme_id.toString() === theme._id.toString())
+        .map(sub => sub.name);
+
+      return {
+        id: theme._id,
+        name: theme.name,
+        subthemes: relatedSubthemes,
+        count: 0 // Aquí luego conectaremos el conteo real de archivos
+      };
+    });
+
+    res.json(structuredData);
+  } catch (error) {
+    console.error("Error obteniendo categorías:", error);
+    res.status(500).json({ error: "Error al cargar las categorías del usuario" });
+  }
+});
+
+// GET: Obtener todos los archivos de un usuario
+
+app.get('/api/v1/files/user/:owner_id', async (req, res) => {
+  try {
+    const { owner_id } = req.params;
+    
+    // 1. Buscamos usando tu modelo "Article"
+    // Filtrar por status: 'available' es una buena práctica para no mostrar archivos borrados o con error
+    const articles = await Article.find({ owner_id, status: 'available' })
+      .populate('theme_id', 'name')
+      .populate('subtheme_id', 'name')
+      .lean();
+
+    // 2. Mapeamos exactamente a los campos de tu ArticleSchema
+    const formattedFiles = articles.map(article => ({
+      id: article._id,
+      name: article.title || article.file_hash, // Usamos title, o el hash como respaldo
+      size: 0, //  Tu esquema no guarda el tamaño en bytes. Mandamos 0 por defecto para que no falle el frontend.
+      date: article.createdAt, // Lo provee el { timestamps: true } de tu esquema
+      category: article.theme_id?.name || 'General',
+      subcategory: article.subtheme_id?.name || 'Otros',
+      hash: article.file_hash // Agregamos el hash porque lo necesitarás para la descarga
+    }));
+
+    res.json(formattedFiles);
+  } catch (error) {
+    console.error("Error obteniendo archivos:", error);
+    res.status(500).json({ error: "Error al cargar los archivos del usuario" });
   }
 });
 
