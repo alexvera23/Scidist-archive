@@ -411,5 +411,77 @@ app.get('/api/v1/files/user/:id', async (req, res) => {
   }
 });
 
+// ==========================================
+//    MIDDLEWARE DE SEGURIDAD PARA ADMIN
+// ==========================================
+const checkAdmin = async (req, res, next) => {
+  // Extraemos el ID del usuario desde un header personalizado
+  const adminId = req.headers['x-admin-id']; 
+  if (!adminId) return res.status(403).json({ error: "Acceso denegado. Se requiere identificación." });
+
+  try {
+    const response = await axios.get(`http://metadata-service:3001/api/v1/admin/check/${adminId}`);
+    if (response.data.is_admin) {
+      next(); // El usuario es admin, la petición puede continuar
+    } else {
+      res.status(403).json({ error: "No tienes permisos de administrador." });
+    }
+  } catch (error) {
+    console.error("[Gateway] Error de autorización:", error.message);
+    res.status(500).json({ error: "Error al verificar credenciales." });
+  }
+};
+
+// ==========================================
+//    PUENTES DE ADMINISTRACIÓN (GATEWAY)
+// ==========================================
+
+app.get('/api/v1/admin/users', checkAdmin, async (req, res) => {
+  try {
+    const response = await axios.get('http://metadata-service:3001/api/v1/admin/users');
+    res.json(response.data);
+  } catch (error) {
+    res.status(error.response?.status || 500).json(error.response?.data || { error: "Error interno" });
+  }
+});
+
+app.delete('/api/v1/admin/users/:id', checkAdmin, async (req, res) => {
+  try {
+    const response = await axios.delete(`http://metadata-service:3001/api/v1/admin/users/${req.params.id}`);
+    res.json(response.data);
+  } catch (error) {
+    res.status(error.response?.status || 500).json(error.response?.data || { error: "Error interno" });
+  }
+});
+
+app.get('/api/v1/admin/nodes', checkAdmin, async (req, res) => {
+  try {
+    const response = await axios.get('http://metadata-service:3001/api/v1/admin/nodes');
+    res.json(response.data);
+  } catch (error) {
+    res.status(error.response?.status || 500).json(error.response?.data || { error: "Error interno" });
+  }
+});
+
+app.get('/api/v1/admin/articles', checkAdmin, async (req, res) => {
+  try {
+    const response = await axios.get('http://metadata-service:3001/api/v1/admin/articles');
+    res.json(response.data);
+  } catch (error) {
+    res.status(error.response?.status || 500).json(error.response?.data || { error: "Error interno" });
+  }
+});
+
+app.get('/api/v1/admin/replications', checkAdmin, async (req, res) => {
+  try {
+    const response = await axios.get('http://metadata-service:3001/api/v1/admin/replications');
+    res.json(response.data);
+  } catch (error) {
+    res.status(error.response?.status || 500).json(error.response?.data || { error: "Error interno" });
+  }
+});
+
+
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`API Gateway escuchando en puerto ${PORT}`));

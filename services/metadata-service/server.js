@@ -504,5 +504,92 @@ app.get('/api/v1/files/user/:owner_id', async (req, res) => {
   }
 });
 
+// ==========================================
+//    ENDPOINTS DE ADMINISTRACIÓN (BACKEND)
+// ==========================================
+
+// 0. Verificar si un usuario es administrador
+app.get('/api/v1/admin/check/:id', async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ error: "Usuario no encontrado" });
+    // Devolvemos el estado de admin (si no existe el campo, por defecto es false)
+    res.json({ is_admin: user.is_admin || false });
+  } catch (error) {
+    res.status(500).json({ error: "Error al verificar permisos" });
+  }
+});
+
+// 1. Obtener lista de todos los usuarios (excluyendo la contraseña)
+app.get('/api/v1/admin/users', async (req, res) => {
+  try {
+    const users = await User.find({}, '-password').sort({ createdAt: -1 }).lean();
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ error: "Error al obtener usuarios" });
+  }
+});
+
+// 2. Eliminar un usuario en cascada (limpiando sus temas y subtemas)
+app.delete('/api/v1/admin/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await User.findByIdAndDelete(id);
+    await Theme.deleteMany({ owner_id: id });
+    await Subtheme.deleteMany({ owner_id: id });
+    // Nota: Las réplicas y archivos físicos podrían quedarse o manejarse con un "soft delete"
+    res.json({ message: "Usuario y estructura de carpetas eliminados correctamente" });
+  } catch (error) {
+    res.status(500).json({ error: "Error al eliminar usuario" });
+  }
+});
+
+// 3. Obtener salud y lista de nodos
+app.get('/api/v1/admin/nodes', async (req, res) => {
+  try {
+    // Usamos el modelo ActiveNode que ya tienes importado
+    const nodes = await ActiveNode.find().lean();
+    const now = new Date();
+    
+    const nodesWithHealth = nodes.map(node => {
+      const lastBeat = new Date(node.last_heartbeat);
+      const diffInSeconds = (now - lastBeat) / 1000;
+      return {
+        ...node,
+        health: diffInSeconds < 30 ? 'healthy' : 'unreachable', // Tolerancia de 30 seg
+        uptime: node.status === 'up' ? 'Online' : 'Offline'
+      };
+    });
+    res.json(nodesWithHealth);
+  } catch (error) {
+    res.status(500).json({ error: "Error al obtener estado de nodos" });
+  }
+});
+
+// 4. Inventario global de artículos (Storage Map)
+app.get('/api/v1/admin/articles', async (req, res) => {
+  try {
+    const articles = await Article.find()
+      .populate('owner_id', 'username email')
+      .populate('theme_id', 'name')
+      .populate('subtheme_id', 'name')
+      .sort({ createdAt: -1 })
+      .lean();
+    res.json(articles);
+  } catch (error) {
+    res.status(500).json({ error: "Error al obtener inventario" });
+  }
+});
+
+// 5. Estado de tareas de replicación
+app.get('/api/v1/admin/replications', async (req, res) => {
+  try {
+    const tasks = await ReplicationTask.find().sort({ createdAt: -1 }).limit(100).lean();
+    res.json(tasks);
+  } catch (error) {
+    res.status(500).json({ error: "Error al obtener tareas de replicación" });
+  }
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(` Metadata Service escuchando en puerto ${PORT}`));
