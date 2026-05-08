@@ -435,6 +435,7 @@ app.post('/api/v1/auth/login', async (req, res) => {
         id: user._id,
         username: user.username,
         email: user.email
+        
       }
     });
   } catch (error) {
