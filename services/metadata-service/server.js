@@ -428,14 +428,14 @@ app.post('/api/v1/auth/login', async (req, res) => {
     }
 
     // 3. Responder con datos básicos del usuario
-    console.log(` Sesión iniciada: ${user.username}`);
+    console.log(` Sesión iniciada: ${user.username} (Admin: ${user.is_admin || false})`);
     res.json({
       message: "Login exitoso",
       user: {
         id: user._id,
         username: user.username,
-        email: user.email
-        
+        email: user.email,
+        is_admin: user.is_admin || false 
       }
     });
   } catch (error) {
