@@ -548,22 +548,39 @@ app.delete('/api/v1/admin/users/:id', async (req, res) => {
 // 3. Obtener salud y lista de nodos
 app.get('/api/v1/admin/nodes', async (req, res) => {
   try {
-    // Usamos el modelo ActiveNode que ya tienes importado
-    const nodes = await ActiveNode.find().lean();
+    const [activeNodes, nodeHealths] = await Promise.all([
+      ActiveNode.find().lean(),
+      NodeHealth.find().lean(),
+    ]);
+ 
+    // Construimos un mapa rápido de salud por node_id
+    const healthMap = Object.fromEntries(
+      nodeHealths.map((h) => [h.node_id, h])
+    );
+ 
     const now = new Date();
-    
-    const nodesWithHealth = nodes.map(node => {
-      const lastBeat = new Date(node.last_heartbeat);
-      const diffInSeconds = (now - lastBeat) / 1000;
+ 
+    const nodesWithHealth = activeNodes.map((node) => {
+      const health    = healthMap[node.node_id];
+      const lastBeat  = health
+        ? new Date(health.last_heartbeat)
+        : new Date(node.last_seen);
+      const diffSecs  = (now - lastBeat) / 1000;
+      const isUp      = health?.status === 'up' && diffSecs < 30;
+ 
       return {
         ...node,
-        health: diffInSeconds < 30 ? 'healthy' : 'unreachable', // Tolerancia de 30 seg
-        uptime: node.status === 'up' ? 'Online' : 'Offline'
+        status:          isUp ? 'up' : 'down',
+        last_heartbeat:  health?.last_heartbeat || node.last_seen,
+        health:          diffSecs < 30 ? 'healthy' : 'unreachable',
+        uptime:          isUp ? 'Online' : 'Offline',
       };
     });
+ 
     res.json(nodesWithHealth);
   } catch (error) {
-    res.status(500).json({ error: "Error al obtener estado de nodos" });
+    console.error('Error al obtener nodos:', error);
+    res.status(500).json({ error: 'Error al obtener estado de nodos' });
   }
 });
 
@@ -589,6 +606,85 @@ app.get('/api/v1/admin/replications', async (req, res) => {
     res.json(tasks);
   } catch (error) {
     res.status(500).json({ error: "Error al obtener tareas de replicación" });
+  }
+});
+
+// ── 6. Crear usuario desde el panel admin
+app.post('/api/v1/admin/users', async (req, res) => {
+  try {
+    const { username, email, password } = req.body;
+ 
+    if (!username || !email || !password) {
+      return res.status(400).json({ error: 'username, email y password son obligatorios' });
+    }
+ 
+    const exists = await User.findOne({ $or: [{ username }, { email }] });
+    if (exists) {
+      return res.status(409).json({ error: 'El nombre de usuario o email ya están en uso' });
+    }
+ 
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = await User.create({ username, email, password: hashedPassword });
+ 
+    // Devolvemos el usuario sin exponer la contraseña
+    const { password: _, ...userSafe } = newUser.toObject();
+    res.status(201).json(userSafe);
+  } catch (error) {
+    console.error('Error al crear usuario:', error);
+    res.status(500).json({ error: 'Error al crear usuario' });
+  }
+});
+ 
+// ── 7. Actualizar usuario desde el panel admin
+app.put('/api/v1/admin/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { username, email, password } = req.body;
+ 
+    const updatePayload = {};
+    if (username) updatePayload.username = username;
+    if (email)    updatePayload.email    = email;
+    if (password) updatePayload.password = await bcrypt.hash(password, 10);
+ 
+    if (Object.keys(updatePayload).length === 0) {
+      return res.status(400).json({ error: 'No se proporcionaron campos para actualizar' });
+    }
+ 
+    // Verificamos colisión de username/email con otros usuarios
+    if (username || email) {
+      const conflict = await User.findOne({
+        _id: { $ne: id },
+        $or: [
+          ...(username ? [{ username }] : []),
+          ...(email    ? [{ email }]    : []),
+        ],
+      });
+      if (conflict) {
+        return res.status(409).json({ error: 'El nombre de usuario o email ya están en uso' });
+      }
+    }
+ 
+    const updated = await User.findByIdAndUpdate(id, updatePayload, { new: true })
+      .select('-password')
+      .lean();
+ 
+    if (!updated) return res.status(404).json({ error: 'Usuario no encontrado' });
+ 
+    res.json(updated);
+  } catch (error) {
+    console.error('Error al actualizar usuario:', error);
+    res.status(500).json({ error: 'Error al actualizar usuario' });
+  }
+});
+ 
+// ── 8. Inventario global de Storage Maps
+app.get('/api/v1/admin/storage-maps', async (req, res) => {
+  try {
+    const maps = await StorageMap.find().sort({ file_hash: 1 }).lean();
+    res.json(maps);
+  } catch (error) {
+    console.error('Error al obtener storage maps:', error);
+    res.status(500).json({ error: 'Error al obtener mapas de almacenamiento' });
   }
 });
 

@@ -415,20 +415,20 @@ app.get('/api/v1/files/user/:id', async (req, res) => {
 //    MIDDLEWARE DE SEGURIDAD PARA ADMIN
 // ==========================================
 const checkAdmin = async (req, res, next) => {
-  // Extraemos el ID del usuario desde un header personalizado
-  const adminId = req.headers['x-admin-id']; 
-  if (!adminId) return res.status(403).json({ error: "Acceso denegado. Se requiere identificación." });
-
+  const userId = req.headers['x-user-id'];
+  if (!userId) {
+    return res.status(401).json({ error: 'No autorizado: falta x-user-id' });
+  }
   try {
-    const response = await axios.get(`http://metadata-service:3001/api/v1/admin/check/${adminId}`);
-    if (response.data.is_admin) {
-      next(); // El usuario es admin, la petición puede continuar
-    } else {
-      res.status(403).json({ error: "No tienes permisos de administrador." });
+    const { data } = await axios.get(
+      `http://metadata-service:3001/api/v1/admin/check/${userId}`
+    );
+    if (!data.is_admin) {
+      return res.status(403).json({ error: 'Acceso denegado: no eres administrador' });
     }
+    next();
   } catch (error) {
-    console.error("[Gateway] Error de autorización:", error.message);
-    res.status(500).json({ error: "Error al verificar credenciales." });
+    res.status(403).json({ error: 'Sin permisos de administrador' });
   }
 };
 
@@ -478,6 +478,50 @@ app.get('/api/v1/admin/replications', checkAdmin, async (req, res) => {
     res.json(response.data);
   } catch (error) {
     res.status(error.response?.status || 500).json(error.response?.data || { error: "Error interno" });
+  }
+});
+
+// ── Puente: Crear usuario
+app.post('/api/v1/admin/users', checkAdmin, async (req, res) => {
+  try {
+    const response = await axios.post(
+      'http://metadata-service:3001/api/v1/admin/users',
+      req.body
+    );
+    res.status(201).json(response.data);
+  } catch (error) {
+    res.status(error.response?.status || 500).json(
+      error.response?.data || { error: 'Error interno' }
+    );
+  }
+});
+ 
+// ── Puente: Actualizar usuario
+app.put('/api/v1/admin/users/:id', checkAdmin, async (req, res) => {
+  try {
+    const response = await axios.put(
+      `http://metadata-service:3001/api/v1/admin/users/${req.params.id}`,
+      req.body
+    );
+    res.json(response.data);
+  } catch (error) {
+    res.status(error.response?.status || 500).json(
+      error.response?.data || { error: 'Error interno' }
+    );
+  }
+});
+ 
+// ── Puente: Storage Maps
+app.get('/api/v1/admin/storage-maps', checkAdmin, async (req, res) => {
+  try {
+    const response = await axios.get(
+      'http://metadata-service:3001/api/v1/admin/storage-maps'
+    );
+    res.json(response.data);
+  } catch (error) {
+    res.status(error.response?.status || 500).json(
+      error.response?.data || { error: 'Error interno' }
+    );
   }
 });
 
