@@ -524,6 +524,62 @@ app.get('/api/v1/admin/storage-maps', checkAdmin, async (req, res) => {
     );
   }
 });
+// ── Árbol con IDs (para el modal de edición)
+app.get('/api/v1/admin/users/:userId/themes', checkAdmin, async (req, res) => {
+  try {
+    const response = await axios.get(
+      `http://metadata-service:3001/api/v1/admin/users/${req.params.userId}/themes`
+    );
+    res.json(response.data);
+  } catch (error) {
+    res.status(error.response?.status || 500).json(
+      error.response?.data || { error: 'Error interno' }
+    );
+  }
+});
+ 
+// ── Añadir temas a usuario existente
+app.post('/api/v1/admin/users/:userId/themes', checkAdmin, async (req, res) => {
+  try {
+    const response = await axios.post(
+      `http://metadata-service:3001/api/v1/admin/users/${req.params.userId}/themes`,
+      req.body
+    );
+    res.json(response.data);
+  } catch (error) {
+    res.status(error.response?.status || 500).json(
+      error.response?.data || { error: 'Error interno' }
+    );
+  }
+});
+ 
+// ── Eliminar tema completo
+app.delete('/api/v1/admin/themes/:themeId', checkAdmin, async (req, res) => {
+  try {
+    const response = await axios.delete(
+      `http://metadata-service:3001/api/v1/admin/themes/${req.params.themeId}`
+    );
+    res.json(response.data);
+  } catch (error) {
+    res.status(error.response?.status || 500).json(
+      error.response?.data || { error: 'Error interno' }
+    );
+  }
+});
+ 
+// ── Eliminar subtema individual
+app.delete('/api/v1/admin/subthemes/:subthemeId', checkAdmin, async (req, res) => {
+  try {
+    const response = await axios.delete(
+      `http://metadata-service:3001/api/v1/admin/subthemes/${req.params.subthemeId}`
+    );
+    res.json(response.data);
+  } catch (error) {
+    res.status(error.response?.status || 500).json(
+      error.response?.data || { error: 'Error interno' }
+    );
+  }
+});
 
 
 

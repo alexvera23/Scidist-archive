@@ -688,5 +688,158 @@ app.get('/api/v1/admin/storage-maps', async (req, res) => {
   }
 });
 
+// ── 9. Árbol de categorías de un usuario CON IDs de subtemas
+//       (versión admin: incluye los _id para poder borrar)
+app.get('/api/v1/admin/users/:userId/themes', async (req, res) => {
+  try {
+    const { userId } = req.params;
+ 
+    const [themes, subthemes] = await Promise.all([
+      Theme.find({ owner_id: userId }).lean(),
+      Subtheme.find({ owner_id: userId }).lean(),
+    ]);
+ 
+    const tree = themes.map((theme) => ({
+      id:        theme._id,
+      name:      theme.name,
+      subthemes: subthemes
+        .filter((sub) => sub.parent_theme_id.toString() === theme._id.toString())
+        .map((sub) => ({ id: sub._id, name: sub.name })),
+    }));
+ 
+    res.json(tree);
+  } catch (error) {
+    console.error('Error al obtener árbol admin:', error);
+    res.status(500).json({ error: 'Error al obtener árbol de categorías' });
+  }
+});
+ 
+// ── 10. Añadir temas/subtemas a un usuario existente
+//        Body: { preferences: { "Redes": ["Protocolos"], "Linux": [] } }
+//        Misma lógica que el registro, pero sobre un usuario ya creado
+app.post('/api/v1/admin/users/:userId/themes', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { preferences } = req.body;
+ 
+    if (!preferences || typeof preferences !== 'object') {
+      return res.status(400).json({ error: 'preferences debe ser un objeto' });
+    }
+ 
+    const userExists = await User.findById(userId);
+    if (!userExists) return res.status(404).json({ error: 'Usuario no encontrado' });
+ 
+    const results = [];
+ 
+    for (const [themeName, subthemes] of Object.entries(preferences)) {
+      if (themeName.toLowerCase() === 'general') continue;
+      if (!Array.isArray(subthemes)) continue;
+ 
+      // Reusar tema existente o crear uno nuevo
+      let theme = await Theme.findOne({ name: themeName, owner_id: userId });
+      if (!theme) {
+        theme = await Theme.create({ name: themeName, owner_id: userId });
+        // Subtema "Otros" por defecto solo si el tema es nuevo
+        await Subtheme.create({ name: 'Otros', parent_theme_id: theme._id, owner_id: userId });
+      }
+ 
+      for (const subName of subthemes) {
+        if (subName.toLowerCase() === 'otros') continue;
+        // Solo crear si no existe ya
+        const exists = await Subtheme.findOne({ name: subName, parent_theme_id: theme._id });
+        if (!exists) {
+          await Subtheme.create({ name: subName, parent_theme_id: theme._id, owner_id: userId });
+        }
+      }
+ 
+      results.push(themeName);
+    }
+ 
+    res.json({ message: 'Categorías añadidas', themes: results });
+  } catch (error) {
+    console.error('Error al añadir temas:', error);
+    res.status(500).json({ error: 'Error al añadir categorías' });
+  }
+});
+ 
+// ── 11. Eliminar un tema completo (y todos sus subtemas)
+//        Los artículos huérfanos se reasignan a General/Otros del usuario
+app.delete('/api/v1/admin/themes/:themeId', async (req, res) => {
+  try {
+    const { themeId } = req.params;
+ 
+    const theme = await Theme.findById(themeId);
+    if (!theme) return res.status(404).json({ error: 'Tema no encontrado' });
+ 
+    // Protegemos la categoría "General"
+    if (theme.name.toLowerCase() === 'general') {
+      return res.status(400).json({ error: 'No se puede eliminar la categoría General' });
+    }
+ 
+    // Buscamos General/Otros del mismo usuario para reasignar artículos
+    const generalTheme = await Theme.findOne({ name: 'General', owner_id: theme.owner_id });
+    const othersSubtheme = generalTheme
+      ? await Subtheme.findOne({ name: 'Otros', parent_theme_id: generalTheme._id })
+      : null;
+ 
+    if (othersSubtheme) {
+      // Reasignar artículos huérfanos
+      await Article.updateMany(
+        { theme_id: themeId, owner_id: theme.owner_id },
+        { theme_id: generalTheme._id, subtheme_id: othersSubtheme._id }
+      );
+    }
+ 
+    // Borrar subtemas y tema
+    await Subtheme.deleteMany({ parent_theme_id: themeId });
+    await Theme.findByIdAndDelete(themeId);
+ 
+    res.json({ message: `Tema "${theme.name}" eliminado` });
+  } catch (error) {
+    console.error('Error al eliminar tema:', error);
+    res.status(500).json({ error: 'Error al eliminar tema' });
+  }
+});
+ 
+// ── 12. Eliminar un subtema individual
+//        Los artículos de ese subtema se reasignan a "Otros" del mismo tema
+app.delete('/api/v1/admin/subthemes/:subthemeId', async (req, res) => {
+  try {
+    const { subthemeId } = req.params;
+ 
+    const subtheme = await Subtheme.findById(subthemeId);
+    if (!subtheme) return res.status(404).json({ error: 'Subtema no encontrado' });
+ 
+    // Protegemos "Otros" dentro de General
+    const parentTheme = await Theme.findById(subtheme.parent_theme_id);
+    if (
+      parentTheme?.name.toLowerCase() === 'general' &&
+      subtheme.name.toLowerCase() === 'otros'
+    ) {
+      return res.status(400).json({ error: 'No se puede eliminar General/Otros' });
+    }
+ 
+    // Reasignar artículos al subtema "Otros" del mismo tema padre
+    const othersInParent = await Subtheme.findOne({
+      name: 'Otros',
+      parent_theme_id: subtheme.parent_theme_id,
+    });
+ 
+    if (othersInParent) {
+      await Article.updateMany(
+        { subtheme_id: subthemeId, owner_id: subtheme.owner_id },
+        { subtheme_id: othersInParent._id }
+      );
+    }
+ 
+    await Subtheme.findByIdAndDelete(subthemeId);
+ 
+    res.json({ message: `Subtema "${subtheme.name}" eliminado` });
+  } catch (error) {
+    console.error('Error al eliminar subtema:', error);
+    res.status(500).json({ error: 'Error al eliminar subtema' });
+  }
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(` Metadata Service escuchando en puerto ${PORT}`));
