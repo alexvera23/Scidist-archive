@@ -28,6 +28,7 @@ export default function Dashboard() {
   const [viewingUrl, setViewingUrl] = useState(null);
   const [isViewLoading, setIsViewLoading] = useState(false);
   const [activeFileTitle, setActiveFileTitle] = useState('');
+  const [fileType, setFileType] = useState('pdf');
 
   useEffect(() => {
     const fetchFiles = async () => {
@@ -129,50 +130,44 @@ const handleFiles = async (selectedFiles) => {
 
   // Futuro manejador para abrir el archivo
   const handleViewFile = async (file) => {
-    setActiveFileTitle(file.name);
-    setIsViewLoading(true);
-    setShowModal(true);
+  setActiveFileTitle(file.name);
+  setIsViewLoading(true);
+  setShowModal(true);
 
-    // 1. Recuperamos el usuario activo para la validación de seguridad
-    const storedUser = JSON.parse(localStorage.getItem('user'));
-    
-    if (!storedUser || !storedUser.id) {
-      alert("Error de sesión. Por favor, vuelve a iniciar sesión.");
-      setShowModal(false);
-      setIsViewLoading(false);
-      return;
+  const storedUser = JSON.parse(localStorage.getItem('user'));
+  if (!storedUser?.id) return;
+
+  try {
+    const response = await api.get(`/download/${file.hash}`, {
+      responseType: 'blob',
+      headers: { 'x-user-id': storedUser.id }
+    });
+
+    const isPdf = file.name.toLowerCase().endsWith('.pdf');
+
+    if (isPdf) {
+      // 1. SOLUCIÓN AL DOWNLOAD: Forzamos el tipo application/pdf
+      const pdfBlob = new Blob([response.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(pdfBlob);
+      setViewingUrl(url);
+      setFileType('pdf');
+    } else {
+      // 2. SOPORTE PARA TEXTO: Usamos FileReader como sugeriste
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setViewingUrl(e.target.result); // Aquí guardamos el texto plano
+        setFileType('text');
+      };
+      reader.readAsText(response.data);
     }
-
-    try {
-      // 2. Corregimos la ruta a '/download/...' y añadimos la cabecera 'x-user-id'
-      const response = await api.get(`/download/${file.hash}`, {
-        responseType: 'blob', // Crítico para manejar archivos binarios en el iframe
-        headers: {
-          'x-user-id': storedUser.id
-        }
-      });
-
-      // 3. Generamos la URL temporal para el visor PDF
-      const fileUrl = URL.createObjectURL(response.data);
-      setViewingUrl(fileUrl);
-      
-    } catch (error) {
-      console.error("Error al obtener la vista previa:", error);
-      
-      // Manejo de errores más descriptivo basado en las respuestas de tu Gateway
-      if (error.response?.status === 404) {
-        alert("El archivo no existe o no tienes permisos para verlo.");
-      } else if (error.response?.status === 503) {
-        alert("El nodo que contiene este archivo está desconectado actualmente.");
-      } else {
-        alert("No se pudo cargar el archivo desde la red distribuida.");
-      }
-      
-      setShowModal(false);
-    } finally {
-      setIsViewLoading(false);
-    }
-  };
+  } catch (error) {
+    console.error("Error en el visor:", error);
+    alert("No se pudo recuperar el archivo.");
+    setShowModal(false);
+  } finally {
+    setIsViewLoading(false);
+  }
+};
 
 // Limpieza de memoria al cerrar el modal
 const handleCloseModal = () => {
@@ -390,35 +385,53 @@ const handleCloseModal = () => {
           contentClassName="bg-dark text-white border-secondary"
         >
           <Modal.Header closeButton closeVariant="white" className="border-secondary">
-            <Modal.Title style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '1px' }}>
-              Vista Previa: <span className="accent">{activeFileTitle}</span>
+            <Modal.Title className='Tittle'>
+              Vista Previa: <span className="accent Titulo">{activeFileTitle}</span>
             </Modal.Title>
           </Modal.Header>
           
-          <Modal.Body className="p-0" style={{ height: '80vh', backgroundColor: '#1a1d21' }}>
+          <Modal.Body className="p-0" style={{ height: '80vh', backgroundColor: '#0d0f12', overflow: 'hidden' }}>
             {isViewLoading ? (
               <div className="h-100 d-flex flex-column align-items-center justify-content-center">
                 <Spinner animation="border" variant="primary" className="mb-3" />
-                <p className="font-monospace small opacity-50">RECUPERANDO BLOQUES DE DATOS...</p>
+                <p className="font-monospace small opacity-50">SINCRONIZANDO BLOQUES...</p>
               </div>
             ) : (
-              <iframe
-                src={`${viewingUrl}#toolbar=0`} // Ocultamos la barra de herramientas nativa para un look más limpio
-                width="100%"
-                height="100%"
-                style={{ border: 'none' }}
-                title="PDF Viewer"
-              />
+              <>
+                {fileType === 'pdf' ? (
+                  /* USAMOS <embed> PARA PDF */
+                  <embed
+                    src={`${viewingUrl}#toolbar=0&navpanes=0&scrollbar=0`}
+                    type="application/pdf"
+                    width="100%"
+                    height="100%"
+                    style={{ border: 'none' }}
+                  />
+                ) : (
+                  /* USAMOS <pre> PARA TEXTO PLANO / CÓDIGO */
+                  <div className="p-4 h-100 overflow-auto">
+                    <pre style={{ 
+                      color: '#d1d5db', 
+                      fontFamily: "'DM Mono', monospace", 
+                      fontSize: '0.9rem',
+                      lineHeight: '1.5',
+                      whiteSpace: 'pre-wrap' 
+                    }}>
+                      {viewingUrl}
+                    </pre>
+                  </div>
+                )}
+              </>
             )}
           </Modal.Body>
           
           <Modal.Footer className="border-secondary bg-dark">
-            <Button variant="outline-secondary" onClick={handleCloseModal} className="rounded-pill px-4">
+            <Button variant="outline" onClick={handleCloseModal} className="rounded-pill px-4 cerrar">
               Cerrar
             </Button>
             <Button 
-              variant="primary" 
-              className="rounded-pill px-4"
+              variant="outline" 
+              className="rounded-pill px-4 complet"
               onClick={() => window.open(viewingUrl, '_blank')}
             >
               <i className="bi bi-box-arrow-up-right me-2"></i> Pantalla Completa
