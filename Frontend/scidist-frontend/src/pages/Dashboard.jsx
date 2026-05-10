@@ -3,6 +3,7 @@ import AppLayout from '../components/layout/AppLayout';
 // Importa los helpers (deberás crearlos o ajustar la ruta)
 import { getIconForCategory, getFileIcon, formatBytes, formatDate } from '../utils/helpers';
 import api from '../api/axiosConfig';
+import '../assets/css/app-styles.css'
 // Datos de prueba (luego vendrán del backend)
 const MOCK_FILES = [
   { id: 1, name: 'Arquitectura_P2P.pdf', size: '2.4 MB', date: '04 May 2026', category: 'Redes', subcategory: 'Topologías' },

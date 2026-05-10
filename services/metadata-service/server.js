@@ -428,13 +428,14 @@ app.post('/api/v1/auth/login', async (req, res) => {
     }
 
     // 3. Responder con datos básicos del usuario
-    console.log(` Sesión iniciada: ${user.username}`);
+    console.log(` Sesión iniciada: ${user.username} (Admin: ${user.is_admin || false})`);
     res.json({
       message: "Login exitoso",
       user: {
         id: user._id,
         username: user.username,
-        email: user.email
+        email: user.email,
+        is_admin: user.is_admin || false 
       }
     });
   } catch (error) {
@@ -501,6 +502,342 @@ app.get('/api/v1/files/user/:owner_id', async (req, res) => {
   } catch (error) {
     console.error("Error obteniendo archivos:", error);
     res.status(500).json({ error: "Error al cargar los archivos del usuario" });
+  }
+});
+
+// ==========================================
+//    ENDPOINTS DE ADMINISTRACIÓN (BACKEND)
+// ==========================================
+
+// 0. Verificar si un usuario es administrador
+app.get('/api/v1/admin/check/:id', async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ error: "Usuario no encontrado" });
+    // Devolvemos el estado de admin (si no existe el campo, por defecto es false)
+    res.json({ is_admin: user.is_admin || false });
+  } catch (error) {
+    res.status(500).json({ error: "Error al verificar permisos" });
+  }
+});
+
+// 1. Obtener lista de todos los usuarios (excluyendo la contraseña)
+app.get('/api/v1/admin/users', async (req, res) => {
+  try {
+    const users = await User.find({}, '-password').sort({ createdAt: -1 }).lean();
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ error: "Error al obtener usuarios" });
+  }
+});
+
+// 2. Eliminar un usuario en cascada (limpiando sus temas y subtemas)
+app.delete('/api/v1/admin/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await User.findByIdAndDelete(id);
+    await Theme.deleteMany({ owner_id: id });
+    await Subtheme.deleteMany({ owner_id: id });
+    // Nota: Las réplicas y archivos físicos podrían quedarse o manejarse con un "soft delete"
+    res.json({ message: "Usuario y estructura de carpetas eliminados correctamente" });
+  } catch (error) {
+    res.status(500).json({ error: "Error al eliminar usuario" });
+  }
+});
+
+// 3. Obtener salud y lista de nodos
+app.get('/api/v1/admin/nodes', async (req, res) => {
+  try {
+    const [activeNodes, nodeHealths] = await Promise.all([
+      ActiveNode.find().lean(),
+      NodeHealth.find().lean(),
+    ]);
+ 
+    // Construimos un mapa rápido de salud por node_id
+    const healthMap = Object.fromEntries(
+      nodeHealths.map((h) => [h.node_id, h])
+    );
+ 
+    const now = new Date();
+ 
+    const nodesWithHealth = activeNodes.map((node) => {
+      const health    = healthMap[node.node_id];
+      const lastBeat  = health
+        ? new Date(health.last_heartbeat)
+        : new Date(node.last_seen);
+      const diffSecs  = (now - lastBeat) / 1000;
+      const isUp      = health?.status === 'up' && diffSecs < 30;
+ 
+      return {
+        ...node,
+        status:          isUp ? 'up' : 'down',
+        last_heartbeat:  health?.last_heartbeat || node.last_seen,
+        health:          diffSecs < 30 ? 'healthy' : 'unreachable',
+        uptime:          isUp ? 'Online' : 'Offline',
+      };
+    });
+ 
+    res.json(nodesWithHealth);
+  } catch (error) {
+    console.error('Error al obtener nodos:', error);
+    res.status(500).json({ error: 'Error al obtener estado de nodos' });
+  }
+});
+
+// 4. Inventario global de artículos (Storage Map)
+app.get('/api/v1/admin/articles', async (req, res) => {
+  try {
+    const articles = await Article.find()
+      .populate('owner_id', 'username email')
+      .populate('theme_id', 'name')
+      .populate('subtheme_id', 'name')
+      .sort({ createdAt: -1 })
+      .lean();
+    res.json(articles);
+  } catch (error) {
+    res.status(500).json({ error: "Error al obtener inventario" });
+  }
+});
+
+// 5. Estado de tareas de replicación
+app.get('/api/v1/admin/replications', async (req, res) => {
+  try {
+    const tasks = await ReplicationTask.find().sort({ createdAt: -1 }).limit(100).lean();
+    res.json(tasks);
+  } catch (error) {
+    res.status(500).json({ error: "Error al obtener tareas de replicación" });
+  }
+});
+
+// ── 6. Crear usuario desde el panel admin
+app.post('/api/v1/admin/users', async (req, res) => {
+  try {
+    const { username, email, password } = req.body;
+ 
+    if (!username || !email || !password) {
+      return res.status(400).json({ error: 'username, email y password son obligatorios' });
+    }
+ 
+    const exists = await User.findOne({ $or: [{ username }, { email }] });
+    if (exists) {
+      return res.status(409).json({ error: 'El nombre de usuario o email ya están en uso' });
+    }
+ 
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = await User.create({ username, email, password: hashedPassword });
+ 
+    // Devolvemos el usuario sin exponer la contraseña
+    const { password: _, ...userSafe } = newUser.toObject();
+    res.status(201).json(userSafe);
+  } catch (error) {
+    console.error('Error al crear usuario:', error);
+    res.status(500).json({ error: 'Error al crear usuario' });
+  }
+});
+ 
+// ── 7. Actualizar usuario desde el panel admin
+app.put('/api/v1/admin/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { username, email, password } = req.body;
+ 
+    const updatePayload = {};
+    if (username) updatePayload.username = username;
+    if (email)    updatePayload.email    = email;
+    if (password) updatePayload.password = await bcrypt.hash(password, 10);
+ 
+    if (Object.keys(updatePayload).length === 0) {
+      return res.status(400).json({ error: 'No se proporcionaron campos para actualizar' });
+    }
+ 
+    // Verificamos colisión de username/email con otros usuarios
+    if (username || email) {
+      const conflict = await User.findOne({
+        _id: { $ne: id },
+        $or: [
+          ...(username ? [{ username }] : []),
+          ...(email    ? [{ email }]    : []),
+        ],
+      });
+      if (conflict) {
+        return res.status(409).json({ error: 'El nombre de usuario o email ya están en uso' });
+      }
+    }
+ 
+    const updated = await User.findByIdAndUpdate(id, updatePayload, { new: true })
+      .select('-password')
+      .lean();
+ 
+    if (!updated) return res.status(404).json({ error: 'Usuario no encontrado' });
+ 
+    res.json(updated);
+  } catch (error) {
+    console.error('Error al actualizar usuario:', error);
+    res.status(500).json({ error: 'Error al actualizar usuario' });
+  }
+});
+ 
+// ── 8. Inventario global de Storage Maps
+app.get('/api/v1/admin/storage-maps', async (req, res) => {
+  try {
+    const maps = await StorageMap.find().sort({ file_hash: 1 }).lean();
+    res.json(maps);
+  } catch (error) {
+    console.error('Error al obtener storage maps:', error);
+    res.status(500).json({ error: 'Error al obtener mapas de almacenamiento' });
+  }
+});
+
+// ── 9. Árbol de categorías de un usuario CON IDs de subtemas
+//       (versión admin: incluye los _id para poder borrar)
+app.get('/api/v1/admin/users/:userId/themes', async (req, res) => {
+  try {
+    const { userId } = req.params;
+ 
+    const [themes, subthemes] = await Promise.all([
+      Theme.find({ owner_id: userId }).lean(),
+      Subtheme.find({ owner_id: userId }).lean(),
+    ]);
+ 
+    const tree = themes.map((theme) => ({
+      id:        theme._id,
+      name:      theme.name,
+      subthemes: subthemes
+        .filter((sub) => sub.parent_theme_id.toString() === theme._id.toString())
+        .map((sub) => ({ id: sub._id, name: sub.name })),
+    }));
+ 
+    res.json(tree);
+  } catch (error) {
+    console.error('Error al obtener árbol admin:', error);
+    res.status(500).json({ error: 'Error al obtener árbol de categorías' });
+  }
+});
+ 
+// ── 10. Añadir temas/subtemas a un usuario existente
+//        Body: { preferences: { "Redes": ["Protocolos"], "Linux": [] } }
+//        Misma lógica que el registro, pero sobre un usuario ya creado
+app.post('/api/v1/admin/users/:userId/themes', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { preferences } = req.body;
+ 
+    if (!preferences || typeof preferences !== 'object') {
+      return res.status(400).json({ error: 'preferences debe ser un objeto' });
+    }
+ 
+    const userExists = await User.findById(userId);
+    if (!userExists) return res.status(404).json({ error: 'Usuario no encontrado' });
+ 
+    const results = [];
+ 
+    for (const [themeName, subthemes] of Object.entries(preferences)) {
+      if (themeName.toLowerCase() === 'general') continue;
+      if (!Array.isArray(subthemes)) continue;
+ 
+      // Reusar tema existente o crear uno nuevo
+      let theme = await Theme.findOne({ name: themeName, owner_id: userId });
+      if (!theme) {
+        theme = await Theme.create({ name: themeName, owner_id: userId });
+        // Subtema "Otros" por defecto solo si el tema es nuevo
+        await Subtheme.create({ name: 'Otros', parent_theme_id: theme._id, owner_id: userId });
+      }
+ 
+      for (const subName of subthemes) {
+        if (subName.toLowerCase() === 'otros') continue;
+        // Solo crear si no existe ya
+        const exists = await Subtheme.findOne({ name: subName, parent_theme_id: theme._id });
+        if (!exists) {
+          await Subtheme.create({ name: subName, parent_theme_id: theme._id, owner_id: userId });
+        }
+      }
+ 
+      results.push(themeName);
+    }
+ 
+    res.json({ message: 'Categorías añadidas', themes: results });
+  } catch (error) {
+    console.error('Error al añadir temas:', error);
+    res.status(500).json({ error: 'Error al añadir categorías' });
+  }
+});
+ 
+// ── 11. Eliminar un tema completo (y todos sus subtemas)
+//        Los artículos huérfanos se reasignan a General/Otros del usuario
+app.delete('/api/v1/admin/themes/:themeId', async (req, res) => {
+  try {
+    const { themeId } = req.params;
+ 
+    const theme = await Theme.findById(themeId);
+    if (!theme) return res.status(404).json({ error: 'Tema no encontrado' });
+ 
+    // Protegemos la categoría "General"
+    if (theme.name.toLowerCase() === 'general') {
+      return res.status(400).json({ error: 'No se puede eliminar la categoría General' });
+    }
+ 
+    // Buscamos General/Otros del mismo usuario para reasignar artículos
+    const generalTheme = await Theme.findOne({ name: 'General', owner_id: theme.owner_id });
+    const othersSubtheme = generalTheme
+      ? await Subtheme.findOne({ name: 'Otros', parent_theme_id: generalTheme._id })
+      : null;
+ 
+    if (othersSubtheme) {
+      // Reasignar artículos huérfanos
+      await Article.updateMany(
+        { theme_id: themeId, owner_id: theme.owner_id },
+        { theme_id: generalTheme._id, subtheme_id: othersSubtheme._id }
+      );
+    }
+ 
+    // Borrar subtemas y tema
+    await Subtheme.deleteMany({ parent_theme_id: themeId });
+    await Theme.findByIdAndDelete(themeId);
+ 
+    res.json({ message: `Tema "${theme.name}" eliminado` });
+  } catch (error) {
+    console.error('Error al eliminar tema:', error);
+    res.status(500).json({ error: 'Error al eliminar tema' });
+  }
+});
+ 
+// ── 12. Eliminar un subtema individual
+//        Los artículos de ese subtema se reasignan a "Otros" del mismo tema
+app.delete('/api/v1/admin/subthemes/:subthemeId', async (req, res) => {
+  try {
+    const { subthemeId } = req.params;
+ 
+    const subtheme = await Subtheme.findById(subthemeId);
+    if (!subtheme) return res.status(404).json({ error: 'Subtema no encontrado' });
+ 
+    // Protegemos "Otros" dentro de General
+    const parentTheme = await Theme.findById(subtheme.parent_theme_id);
+    if (
+      parentTheme?.name.toLowerCase() === 'general' &&
+      subtheme.name.toLowerCase() === 'otros'
+    ) {
+      return res.status(400).json({ error: 'No se puede eliminar General/Otros' });
+    }
+ 
+    // Reasignar artículos al subtema "Otros" del mismo tema padre
+    const othersInParent = await Subtheme.findOne({
+      name: 'Otros',
+      parent_theme_id: subtheme.parent_theme_id,
+    });
+ 
+    if (othersInParent) {
+      await Article.updateMany(
+        { subtheme_id: subthemeId, owner_id: subtheme.owner_id },
+        { subtheme_id: othersInParent._id }
+      );
+    }
+ 
+    await Subtheme.findByIdAndDelete(subthemeId);
+ 
+    res.json({ message: `Subtema "${subtheme.name}" eliminado` });
+  } catch (error) {
+    console.error('Error al eliminar subtema:', error);
+    res.status(500).json({ error: 'Error al eliminar subtema' });
   }
 });
 

@@ -1,0 +1,316 @@
+/* ═══════════════════════════════════════════════
+   SCIDIST — ADMIN PANEL STYLES
+   Dashboard-admi.css
+═══════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+/* ── VARIABLES ── */
+:root {
+  --accent:      #e63946;
+  --gold:        #c9a84c;
+  --adm-bg:      #0d0d0d;
+  --adm-surface: #141414;
+  --adm-paper:   #f0ece4;
+  --adm-muted:   #6b6560;
+  --adm-border:  rgba(240, 236, 228, 0.08);
+}
+
+/* ── BASE ── */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+.adm-root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--adm-bg);
+  color: var(--adm-paper);
+  font-family: 'DM Sans', sans-serif;
+}
+
+/* ── NAVBAR ── */
+.adm-navbar {
+  background: rgba(13, 13, 13, 0.95);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--adm-border);
+  padding: 0.8rem 0;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.adm-navbar-inner {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.adm-brand {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.7rem;
+  letter-spacing: 0.1em;
+  color: var(--adm-paper);
+  text-decoration: none;
+}
+
+.adm-brand:hover {
+  color: var(--adm-paper);
+  text-decoration: none;
+}
+
+.adm-brand .accent {
+  color: var(--accent);
+}
+
+.adm-admin-chip {
+  background: rgba(230, 57, 70, 0.15);
+  border: 1px solid rgba(230, 57, 70, 0.4);
+  color: var(--accent);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.6rem;
+  padding: 0.15rem 0.5rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.adm-btn-menu {
+  border: none;
+  background: none;
+  color: var(--adm-paper);
+  cursor: pointer;
+  padding: 0;
+}
+
+.adm-btn-logout {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  border: 1px solid var(--adm-border);
+  background: transparent;
+  color: var(--adm-muted);
+  padding: 0.45rem 1.1rem;
+  cursor: pointer;
+  transition: 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.adm-btn-logout:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ── SIDEBAR / OFFCANVAS ── */
+.adm-sidebar {
+  background: var(--adm-surface) !important;
+  border-right: 1px solid var(--adm-border) !important;
+  width: 320px !important;
+  color: var(--adm-paper);
+}
+
+.adm-sidebar .offcanvas-header {
+  border-bottom: 1px solid var(--adm-border);
+  padding: 1.5rem;
+}
+
+.adm-sidebar .offcanvas-body {
+  padding: 0;
+  background: var(--adm-surface);
+}
+
+.adm-sidebar .btn-close {
+  filter: invert(1);
+  opacity: 0.4;
+}
+
+.adm-sidebar .btn-close:hover {
+  opacity: 0.9;
+}
+
+.adm-sidebar-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  color: var(--adm-muted);
+  text-transform: uppercase;
+}
+
+.adm-sidebar-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.1rem;
+  color: var(--adm-paper);
+  margin-top: 0.15rem;
+}
+
+/* ── SIDEBAR NAV ITEMS ── */
+.adm-nav {
+  padding-top: 0.5rem;
+}
+
+.adm-nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.8rem 1.5rem;
+  border: none;
+  background: transparent;
+  width: 100%;
+  color: var(--adm-muted);
+  font-size: 0.875rem;
+  font-family: 'DM Sans', sans-serif;
+  cursor: pointer;
+  text-align: left;
+  border-left: 3px solid transparent;
+  transition: all 0.2s;
+}
+
+.adm-nav-item:hover {
+  background: rgba(240, 236, 228, 0.04);
+  color: var(--adm-paper);
+  border-left-color: var(--gold);
+}
+
+.adm-nav-item.active {
+  background: rgba(240, 236, 228, 0.06);
+  color: var(--adm-paper);
+  border-left-color: var(--accent);
+}
+
+.adm-nav-item-inner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.adm-nav-item-inner i {
+  width: 1rem;
+  text-align: center;
+  opacity: 0.8;
+}
+
+.adm-divider {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.25em;
+  color: var(--adm-muted);
+  text-transform: uppercase;
+  padding: 1.2rem 1.5rem 0.5rem;
+  opacity: 0.5;
+}
+
+/* ── BADGES (sidebar) ── */
+.adm-badge {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.6rem;
+  background: rgba(240, 236, 228, 0.07);
+  color: var(--adm-muted);
+  padding: 0.15rem 0.5rem;
+  border-radius: 2px;
+  min-width: 20px;
+  text-align: center;
+}
+
+.adm-badge.warn {
+  background: rgba(234, 179, 8, 0.15);
+  color: #eab308;
+}
+
+.adm-badge.accent-badge {
+  background: rgba(230, 57, 70, 0.15);
+  color: var(--accent);
+}
+
+/* ── STATS ROW ── */
+.adm-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--adm-border);
+  border: 1px solid var(--adm-border);
+  margin-bottom: 2.5rem;
+}
+
+.adm-stat-card {
+  background: var(--adm-surface);
+  padding: 1.25rem 1.5rem;
+  transition: background 0.2s;
+}
+
+.adm-stat-card:hover {
+  background: var(--adm-bg);
+}
+
+.adm-stat-num {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 2rem;
+  display: block;
+}
+
+.adm-stat-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--adm-muted);
+}
+
+/* ── MAIN & FOOTER ── */
+.adm-main {
+  flex: 1;
+  padding: 2.5rem 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.adm-footer {
+  text-align: center;
+  padding: 1.2rem;
+  border-top: 1px solid var(--adm-border);
+}
+
+.adm-footer-logo {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1rem;
+  letter-spacing: 0.1em;
+  color: var(--adm-muted);
+}
+
+.adm-footer-note {
+  font-size: 0.7rem;
+  color: var(--adm-muted);
+  opacity: 0.5;
+}
+
+/* ── ANIMATIONS ── */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 768px) {
+  .adm-stats-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .adm-sidebar {
+    width: 280px !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .adm-main {
+    padding: 1.5rem 1rem;
+  }
+  .adm-navbar-inner {
+    padding: 0 1rem;
+  }
+}

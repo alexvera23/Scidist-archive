@@ -90,12 +90,20 @@ const handleLoginSubmit = async (e) => {
     const response = await api.post('/auth/login', payload);
     
     if (response.status === 200) {
+      const userData = response.data.user;
       // 1. Guardamos la persistencia básica en el navegador
       localStorage.setItem('user', JSON.stringify(response.data.user));
-      
+      if(userData.is_admin){
+        alert('Inicio de sesion de administrador exitoso');
+        navigate('/dashboard-admi')
+      }else{
       // 2. Redirigimos al Dashboard (la antigua app.html)
       alert('Inicio de sesion exitoso')
       navigate('/dashboard'); 
+        
+      }
+
+
     }
   } catch (error) {
     console.error('Error en login:', error);

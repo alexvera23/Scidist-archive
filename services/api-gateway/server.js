@@ -411,5 +411,177 @@ app.get('/api/v1/files/user/:id', async (req, res) => {
   }
 });
 
+// ==========================================
+//    MIDDLEWARE DE SEGURIDAD PARA ADMIN
+// ==========================================
+const checkAdmin = async (req, res, next) => {
+  const userId = req.headers['x-user-id'];
+  if (!userId) {
+    return res.status(401).json({ error: 'No autorizado: falta x-user-id' });
+  }
+  try {
+    const { data } = await axios.get(
+      `http://metadata-service:3001/api/v1/admin/check/${userId}`
+    );
+    if (!data.is_admin) {
+      return res.status(403).json({ error: 'Acceso denegado: no eres administrador' });
+    }
+    next();
+  } catch (error) {
+    res.status(403).json({ error: 'Sin permisos de administrador' });
+  }
+};
+
+// ==========================================
+//    PUENTES DE ADMINISTRACIÓN (GATEWAY)
+// ==========================================
+
+app.get('/api/v1/admin/users', checkAdmin, async (req, res) => {
+  try {
+    const response = await axios.get('http://metadata-service:3001/api/v1/admin/users');
+    res.json(response.data);
+  } catch (error) {
+    res.status(error.response?.status || 500).json(error.response?.data || { error: "Error interno" });
+  }
+});
+
+app.delete('/api/v1/admin/users/:id', checkAdmin, async (req, res) => {
+  try {
+    const response = await axios.delete(`http://metadata-service:3001/api/v1/admin/users/${req.params.id}`);
+    res.json(response.data);
+  } catch (error) {
+    res.status(error.response?.status || 500).json(error.response?.data || { error: "Error interno" });
+  }
+});
+
+app.get('/api/v1/admin/nodes', checkAdmin, async (req, res) => {
+  try {
+    const response = await axios.get('http://metadata-service:3001/api/v1/admin/nodes');
+    res.json(response.data);
+  } catch (error) {
+    res.status(error.response?.status || 500).json(error.response?.data || { error: "Error interno" });
+  }
+});
+
+app.get('/api/v1/admin/articles', checkAdmin, async (req, res) => {
+  try {
+    const response = await axios.get('http://metadata-service:3001/api/v1/admin/articles');
+    res.json(response.data);
+  } catch (error) {
+    res.status(error.response?.status || 500).json(error.response?.data || { error: "Error interno" });
+  }
+});
+
+app.get('/api/v1/admin/replications', checkAdmin, async (req, res) => {
+  try {
+    const response = await axios.get('http://metadata-service:3001/api/v1/admin/replications');
+    res.json(response.data);
+  } catch (error) {
+    res.status(error.response?.status || 500).json(error.response?.data || { error: "Error interno" });
+  }
+});
+
+// ── Puente: Crear usuario
+app.post('/api/v1/admin/users', checkAdmin, async (req, res) => {
+  try {
+    const response = await axios.post(
+      'http://metadata-service:3001/api/v1/admin/users',
+      req.body
+    );
+    res.status(201).json(response.data);
+  } catch (error) {
+    res.status(error.response?.status || 500).json(
+      error.response?.data || { error: 'Error interno' }
+    );
+  }
+});
+ 
+// ── Puente: Actualizar usuario
+app.put('/api/v1/admin/users/:id', checkAdmin, async (req, res) => {
+  try {
+    const response = await axios.put(
+      `http://metadata-service:3001/api/v1/admin/users/${req.params.id}`,
+      req.body
+    );
+    res.json(response.data);
+  } catch (error) {
+    res.status(error.response?.status || 500).json(
+      error.response?.data || { error: 'Error interno' }
+    );
+  }
+});
+ 
+// ── Puente: Storage Maps
+app.get('/api/v1/admin/storage-maps', checkAdmin, async (req, res) => {
+  try {
+    const response = await axios.get(
+      'http://metadata-service:3001/api/v1/admin/storage-maps'
+    );
+    res.json(response.data);
+  } catch (error) {
+    res.status(error.response?.status || 500).json(
+      error.response?.data || { error: 'Error interno' }
+    );
+  }
+});
+// ── Árbol con IDs (para el modal de edición)
+app.get('/api/v1/admin/users/:userId/themes', checkAdmin, async (req, res) => {
+  try {
+    const response = await axios.get(
+      `http://metadata-service:3001/api/v1/admin/users/${req.params.userId}/themes`
+    );
+    res.json(response.data);
+  } catch (error) {
+    res.status(error.response?.status || 500).json(
+      error.response?.data || { error: 'Error interno' }
+    );
+  }
+});
+ 
+// ── Añadir temas a usuario existente
+app.post('/api/v1/admin/users/:userId/themes', checkAdmin, async (req, res) => {
+  try {
+    const response = await axios.post(
+      `http://metadata-service:3001/api/v1/admin/users/${req.params.userId}/themes`,
+      req.body
+    );
+    res.json(response.data);
+  } catch (error) {
+    res.status(error.response?.status || 500).json(
+      error.response?.data || { error: 'Error interno' }
+    );
+  }
+});
+ 
+// ── Eliminar tema completo
+app.delete('/api/v1/admin/themes/:themeId', checkAdmin, async (req, res) => {
+  try {
+    const response = await axios.delete(
+      `http://metadata-service:3001/api/v1/admin/themes/${req.params.themeId}`
+    );
+    res.json(response.data);
+  } catch (error) {
+    res.status(error.response?.status || 500).json(
+      error.response?.data || { error: 'Error interno' }
+    );
+  }
+});
+ 
+// ── Eliminar subtema individual
+app.delete('/api/v1/admin/subthemes/:subthemeId', checkAdmin, async (req, res) => {
+  try {
+    const response = await axios.delete(
+      `http://metadata-service:3001/api/v1/admin/subthemes/${req.params.subthemeId}`
+    );
+    res.json(response.data);
+  } catch (error) {
+    res.status(error.response?.status || 500).json(
+      error.response?.data || { error: 'Error interno' }
+    );
+  }
+});
+
+
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`API Gateway escuchando en puerto ${PORT}`));
