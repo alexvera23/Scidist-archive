@@ -367,6 +367,22 @@ body {
     .footer-note { font-size: 0.75rem; color: var(--muted); letter-spacing: 0.05em; }
 
 
+
+
+ .file-viewer-modal .modal-content {
+    border-radius: 15px;
+    overflow: hidden;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+}
+
+.file-viewer-modal .modal-header {
+    background-color: var(--surface);
+}
+
+/* Estilo para que el iframe se adapte bien */
+iframe {
+    background-color: #f1f1f1; /* Color claro para el fondo del PDF */
+}
 /* BREAKPOINTS Y AJUSTES */
 @media (max-width: 576px) {
   .main-header { text-align: center; }

@@ -3,7 +3,8 @@ import AppLayout from '../components/layout/AppLayout';
 // Importa los helpers (deberás crearlos o ajustar la ruta)
 import { getIconForCategory, getFileIcon, formatBytes, formatDate } from '../utils/helpers';
 import api from '../api/axiosConfig';
-import '../assets/css/app-styles.css'
+import '../assets/css/app-styles.css';
+import { Modal, Button, Spinner } from 'react-bootstrap';
 // Datos de prueba (luego vendrán del backend)
 const MOCK_FILES = [
   { id: 1, name: 'Arquitectura_P2P.pdf', size: '2.4 MB', date: '04 May 2026', category: 'Redes', subcategory: 'Topologías' },
@@ -23,6 +24,10 @@ export default function Dashboard() {
   const [isLoadingFiles, setIsLoadingFiles] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0); // Llave para forzar la recarga de la galería
+  const [showModal, setShowModal] = useState(false);
+  const [viewingUrl, setViewingUrl] = useState(null);
+  const [isViewLoading, setIsViewLoading] = useState(false);
+  const [activeFileTitle, setActiveFileTitle] = useState('');
 
   useEffect(() => {
     const fetchFiles = async () => {
@@ -110,6 +115,7 @@ const handleFiles = async (selectedFiles) => {
         }
       });
       console.log(` ${file.name} subido con éxito`, response.data);
+      alert('Archivo subido con éxito')
     } catch (error) {
       console.error(` Error al subir ${file.name}:`, error);
       const errorMsg = error.response?.data?.error || error.message;
@@ -122,13 +128,114 @@ const handleFiles = async (selectedFiles) => {
 };
 
   // Futuro manejador para abrir el archivo
-  const handleViewFile = (file) => {
-    console.log("Abriendo visor para:", file.name);
-    // Aquí a futuro:
-    // 1. Haremos un GET al Gateway para traer el archivo físico desde los nodos de Windows.
-    // 2. Si es PDF/IMG, lo abriremos en un Modal o nueva pestaña.
-    // 3. Si es DOCX/XLSX, usaremos una librería como react-file-viewer.
-    alert(`Próximamente: Abriendo el archivo ${file.name} en el visor integrado.`);
+  const handleViewFile = async (file) => {
+    setActiveFileTitle(file.name);
+    setIsViewLoading(true);
+    setShowModal(true);
+
+    // 1. Recuperamos el usuario activo para la validación de seguridad
+    const storedUser = JSON.parse(localStorage.getItem('user'));
+    
+    if (!storedUser || !storedUser.id) {
+      alert("Error de sesión. Por favor, vuelve a iniciar sesión.");
+      setShowModal(false);
+      setIsViewLoading(false);
+      return;
+    }
+
+    try {
+      // 2. Corregimos la ruta a '/download/...' y añadimos la cabecera 'x-user-id'
+      const response = await api.get(`/download/${file.hash}`, {
+        responseType: 'blob', // Crítico para manejar archivos binarios en el iframe
+        headers: {
+          'x-user-id': storedUser.id
+        }
+      });
+
+      // 3. Generamos la URL temporal para el visor PDF
+      const fileUrl = URL.createObjectURL(response.data);
+      setViewingUrl(fileUrl);
+      
+    } catch (error) {
+      console.error("Error al obtener la vista previa:", error);
+      
+      // Manejo de errores más descriptivo basado en las respuestas de tu Gateway
+      if (error.response?.status === 404) {
+        alert("El archivo no existe o no tienes permisos para verlo.");
+      } else if (error.response?.status === 503) {
+        alert("El nodo que contiene este archivo está desconectado actualmente.");
+      } else {
+        alert("No se pudo cargar el archivo desde la red distribuida.");
+      }
+      
+      setShowModal(false);
+    } finally {
+      setIsViewLoading(false);
+    }
+  };
+
+// Limpieza de memoria al cerrar el modal
+const handleCloseModal = () => {
+  setShowModal(false);
+  if (viewingUrl) {
+    URL.revokeObjectURL(viewingUrl); // Liberamos la memoria del navegador
+    setViewingUrl(null);
+  }
+};
+
+// Función para Descargar el archivo físicamente
+  const handleDownloadFile = async (file) => {
+    const storedUser = JSON.parse(localStorage.getItem('user'));
+    if (!storedUser || !storedUser.id) {
+      return alert("Sesión expirada. Por favor, vuelve a iniciar sesión.");
+    }
+
+    try {
+      const response = await api.get(`/download/${file.hash}`, {
+        responseType: 'blob', // Necesario para descargar binarios
+        headers: { 'x-user-id': storedUser.id }
+      });
+
+      // Crear un enlace temporal en el navegador para forzar la descarga
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', file.name); // Mantiene el nombre original
+      document.body.appendChild(link);
+      link.click();
+      
+      // Limpieza
+      link.parentNode.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Error al descargar:", error);
+      alert("No se pudo descargar el archivo desde la red.");
+    }
+  };
+
+  // Función para Eliminar el archivo
+  const handleDeleteFile = async (file) => {
+    const confirmar = window.confirm(`¿Estás seguro de que deseas eliminar "${file.name}"?`);
+    if (!confirmar) return;
+
+    const storedUser = JSON.parse(localStorage.getItem('user'));
+    if (!storedUser || !storedUser.id) {
+      return alert("Sesión expirada. Por favor, vuelve a iniciar sesión.");
+    }
+
+    try {
+      const response = await api.delete(`/delete/${file.hash}`, {
+        headers: { 'x-user-id': storedUser.id }
+      });
+      
+      console.log(response.data.message);
+      
+      // Forzamos la recarga de la galería cambiando el refreshKey
+      setRefreshKey(prev => prev + 1); 
+    } catch (error) {
+      console.error("Error al eliminar:", error);
+      alert(error.response?.data?.error || "Error al eliminar el archivo.");
+    }
   };
 
   return (
@@ -229,11 +336,19 @@ const handleFiles = async (selectedFiles) => {
                         <button className="btn btn-link text-muted p-0" data-bs-toggle="dropdown">
                           <i className="bi bi-three-dots-vertical fs-5"></i>
                         </button>
-                        <ul className="dropdown-menu dropdown-menu-end shadow-sm border-0">
-                          <li><button className="dropdown-item"><i className="bi bi-download me-2"></i>Descargar</button></li>
-                          <li><hr className="dropdown-divider" /></li>
-                          <li><button className="dropdown-item text-danger"><i className="bi bi-trash me-2"></i>Eliminar</button></li>
-                        </ul>
+                       <ul className="dropdown-menu dropdown-menu-end shadow-sm border-0">
+                        <li>
+                          <button className="dropdown-item" onClick={() => handleDownloadFile(file)}>
+                            <i className="bi bi-download me-2"></i>Descargar
+                          </button>
+                        </li>
+                        <li><hr className="dropdown-divider" /></li>
+                        <li>
+                          <button className="dropdown-item text-danger" onClick={() => handleDeleteFile(file)}>
+                            <i className="bi bi-trash me-2"></i>Eliminar
+                          </button>
+                        </li>
+                      </ul>
                       </div>
                     </div>
                     
@@ -265,6 +380,52 @@ const handleFiles = async (selectedFiles) => {
           </div>
         )}
       </div>
+      {/* VISOR DE ARCHIVOS (MODAL) */}
+        <Modal 
+          show={showModal} 
+          onHide={handleCloseModal} 
+          size="xl" 
+          centered 
+          className="file-viewer-modal"
+          contentClassName="bg-dark text-white border-secondary"
+        >
+          <Modal.Header closeButton closeVariant="white" className="border-secondary">
+            <Modal.Title style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '1px' }}>
+              Vista Previa: <span className="accent">{activeFileTitle}</span>
+            </Modal.Title>
+          </Modal.Header>
+          
+          <Modal.Body className="p-0" style={{ height: '80vh', backgroundColor: '#1a1d21' }}>
+            {isViewLoading ? (
+              <div className="h-100 d-flex flex-column align-items-center justify-content-center">
+                <Spinner animation="border" variant="primary" className="mb-3" />
+                <p className="font-monospace small opacity-50">RECUPERANDO BLOQUES DE DATOS...</p>
+              </div>
+            ) : (
+              <iframe
+                src={`${viewingUrl}#toolbar=0`} // Ocultamos la barra de herramientas nativa para un look más limpio
+                width="100%"
+                height="100%"
+                style={{ border: 'none' }}
+                title="PDF Viewer"
+              />
+            )}
+          </Modal.Body>
+          
+          <Modal.Footer className="border-secondary bg-dark">
+            <Button variant="outline-secondary" onClick={handleCloseModal} className="rounded-pill px-4">
+              Cerrar
+            </Button>
+            <Button 
+              variant="primary" 
+              className="rounded-pill px-4"
+              onClick={() => window.open(viewingUrl, '_blank')}
+            >
+              <i className="bi bi-box-arrow-up-right me-2"></i> Pantalla Completa
+            </Button>
+          </Modal.Footer>
+        </Modal>
+
     </AppLayout>
   );
 }
