@@ -577,6 +577,44 @@ app.delete('/api/v1/admin/subthemes/:subthemeId', checkAdmin, async (req, res) =
   }
 });
 
+// ==========================================
+//    PUENTES DE CATEGORÍAS (USUARIO)
+// ==========================================
+
+app.get('/api/v1/themes/me', async (req, res) => {
+  const userId = req.headers['x-user-id'];
+  if (!userId) return res.status(401).json({ error: 'No autorizado' });
+  try {
+    const response = await axios.get(`http://metadata-service:3001/api/v1/themes/me`, { headers: { 'x-user-id': userId } });
+    res.json(response.data);
+  } catch (error) { res.status(error.response?.status || 500).json(error.response?.data || { error: 'Error' }); }
+});
+
+app.post('/api/v1/themes/me', async (req, res) => {
+  const userId = req.headers['x-user-id'];
+  if (!userId) return res.status(401).json({ error: 'No autorizado' });
+  try {
+    const response = await axios.post(`http://metadata-service:3001/api/v1/themes/me`, req.body, { headers: { 'x-user-id': userId } });
+    res.json(response.data);
+  } catch (error) { res.status(error.response?.status || 500).json(error.response?.data || { error: 'Error' }); }
+});
+
+app.delete('/api/v1/themes/me/:id', async (req, res) => {
+  const userId = req.headers['x-user-id'];
+  try {
+    const response = await axios.delete(`http://metadata-service:3001/api/v1/themes/me/${req.params.id}`, { headers: { 'x-user-id': userId } });
+    res.json(response.data);
+  } catch (error) { res.status(error.response?.status || 500).json(error.response?.data || { error: 'Error' }); }
+});
+
+app.delete('/api/v1/subthemes/me/:id', async (req, res) => {
+  const userId = req.headers['x-user-id'];
+  try {
+    const response = await axios.delete(`http://metadata-service:3001/api/v1/subthemes/me/${req.params.id}`, { headers: { 'x-user-id': userId } });
+    res.json(response.data);
+  } catch (error) { res.status(error.response?.status || 500).json(error.response?.data || { error: 'Error' }); }
+});
+
 
 
 const PORT = process.env.PORT || 3000;

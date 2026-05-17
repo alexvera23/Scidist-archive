@@ -841,5 +841,112 @@ app.delete('/api/v1/admin/subthemes/:subthemeId', async (req, res) => {
   }
 });
 
+// ==========================================
+//    ENDPOINTS DE CATEGORÍAS (USUARIO)
+// ==========================================
+
+// 1. Obtener el árbol del usuario logueado
+app.get('/api/v1/themes/me', async (req, res) => {
+  try {
+    const owner_id = req.headers['x-user-id'];
+    if (!owner_id) return res.status(401).json({ error: 'Falta cabecera x-user-id' });
+
+    const [themes, subthemes] = await Promise.all([
+      Theme.find({ owner_id }).lean(),
+      Subtheme.find({ owner_id }).lean(),
+    ]);
+
+    const tree = themes.map((theme) => ({
+      id: theme._id,
+      name: theme.name,
+      subthemes: subthemes
+        .filter((sub) => sub.parent_theme_id.toString() === theme._id.toString())
+        .map((sub) => ({ id: sub._id, name: sub.name })),
+    }));
+    res.json(tree);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener categorías' });
+  }
+});
+
+// 2. Añadir nuevas temáticas/subtemáticas
+app.post('/api/v1/themes/me', async (req, res) => {
+  try {
+    const owner_id = req.headers['x-user-id'];
+    const { preferences } = req.body;
+    if (!owner_id) return res.status(401).json({ error: 'No autorizado' });
+
+    const results = [];
+    for (const [themeName, subthemes] of Object.entries(preferences)) {
+      if (themeName.toLowerCase() === 'general') continue;
+      
+      let theme = await Theme.findOne({ name: themeName, owner_id });
+      if (!theme) {
+        theme = await Theme.create({ name: themeName, owner_id });
+        await Subtheme.create({ name: 'Otros', parent_theme_id: theme._id, owner_id });
+      }
+
+      for (const subName of subthemes) {
+        if (subName.toLowerCase() === 'otros') continue;
+        const exists = await Subtheme.findOne({ name: subName, parent_theme_id: theme._id });
+        if (!exists) {
+          await Subtheme.create({ name: subName, parent_theme_id: theme._id, owner_id });
+        }
+      }
+      results.push(themeName);
+    }
+    res.json({ message: 'Categorías actualizadas', themes: results });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al guardar categorías' });
+  }
+});
+
+// 3. Eliminar Tema (RESTRICCIÓN: Solo si está vacío)
+app.delete('/api/v1/themes/me/:themeId', async (req, res) => {
+  try {
+    const owner_id = req.headers['x-user-id'];
+    const { themeId } = req.params;
+
+    const theme = await Theme.findOne({ _id: themeId, owner_id });
+    if (!theme) return res.status(404).json({ error: 'Tema no encontrado' });
+    if (theme.name.toLowerCase() === 'general') return res.status(400).json({ error: 'No puedes borrar General' });
+
+    // VERIFICACIÓN: ¿Tiene archivos?
+    const filesCount = await Article.countDocuments({ theme_id: themeId, owner_id });
+    if (filesCount > 0) {
+      return res.status(400).json({ error: 'No puedes eliminar un tema que contiene archivos. Mueve o elimina los archivos primero.' });
+    }
+
+    await Subtheme.deleteMany({ parent_theme_id: themeId });
+    await Theme.findByIdAndDelete(themeId);
+    res.json({ message: 'Tema eliminado' });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al eliminar' });
+  }
+});
+
+// 4. Eliminar Subtema (RESTRICCIÓN: Solo si está vacío)
+app.delete('/api/v1/subthemes/me/:subthemeId', async (req, res) => {
+  try {
+    const owner_id = req.headers['x-user-id'];
+    const { subthemeId } = req.params;
+
+    const subtheme = await Subtheme.findOne({ _id: subthemeId, owner_id });
+    if (!subtheme) return res.status(404).json({ error: 'Subtema no encontrado' });
+    if (subtheme.name.toLowerCase() === 'otros') return res.status(400).json({ error: 'No puedes borrar la subcategoría Otros' });
+
+    // VERIFICACIÓN: ¿Tiene archivos?
+    const filesCount = await Article.countDocuments({ subtheme_id: subthemeId, owner_id });
+    if (filesCount > 0) {
+      return res.status(400).json({ error: 'No puedes eliminar un subtema que contiene archivos.' });
+    }
+
+    await Subtheme.findByIdAndDelete(subthemeId);
+    res.json({ message: 'Subtema eliminado' });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al eliminar' });
+  }
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(` Metadata Service escuchando en puerto ${PORT}`));

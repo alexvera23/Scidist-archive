@@ -6,13 +6,13 @@ import api from '../api/axiosConfig';
 import '../assets/css/app-styles.css';
 import { Modal, Button, Spinner } from 'react-bootstrap';
 // Datos de prueba (luego vendrán del backend)
-const MOCK_FILES = [
-  { id: 1, name: 'Arquitectura_P2P.pdf', size: '2.4 MB', date: '04 May 2026', category: 'Redes', subcategory: 'Topologías' },
-  { id: 2, name: 'modelo_entrenamiento.py', size: '15 KB', date: '03 May 2026', category: 'Inteligencia Artificial', subcategory: 'Machine Learning' },
-  { id: 3, name: 'server_gateway.js', size: '8 KB', date: '02 May 2026', category: 'Desarrollo de Software', subcategory: 'Backend' },
-  { id: 4, name: 'apuntes_protocolos.docx', size: '1.1 MB', date: '01 May 2026', category: 'Redes', subcategory: 'Protocolos' },
-  { id: 5, name: 'diagrama_db.png', size: '3.5 MB', date: '28 Abr 2026', category: 'General', subcategory: 'Otros' }
-];
+// const MOCK_FILES = [
+//   { id: 1, name: 'Arquitectura_P2P.pdf', size: '2.4 MB', date: '04 May 2026', category: 'Redes', subcategory: 'Topologías' },
+//   { id: 2, name: 'modelo_entrenamiento.py', size: '15 KB', date: '03 May 2026', category: 'Inteligencia Artificial', subcategory: 'Machine Learning' },
+//   { id: 3, name: 'server_gateway.js', size: '8 KB', date: '02 May 2026', category: 'Desarrollo de Software', subcategory: 'Backend' },
+//   { id: 4, name: 'apuntes_protocolos.docx', size: '1.1 MB', date: '01 May 2026', category: 'Redes', subcategory: 'Protocolos' },
+//   { id: 5, name: 'diagrama_db.png', size: '3.5 MB', date: '28 Abr 2026', category: 'General', subcategory: 'Otros' }
+// ];
 
 export default function Dashboard() {
   const [currentFilter, setCurrentFilter] = useState('todos');
