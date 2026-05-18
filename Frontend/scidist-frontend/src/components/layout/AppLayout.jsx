@@ -10,7 +10,7 @@ import { getIconForCategory } from '../../utils/helpers';
 
 
 
-export default function AppLayout({ children, onSelectCategory, categoryCounts = {} }) {
+export default function AppLayout({ children, onSelectCategory, categoryCounts = {}, refreshKey }) {
   const [showSidebar, setShowSidebar] = useState(false);
   const [activeCategory, setActiveCategory] = useState('todos');
   const [openAccordions, setOpenAccordions] = useState({});
@@ -52,7 +52,7 @@ export default function AppLayout({ children, onSelectCategory, categoryCounts =
     };
 
     fetchCategories();
-  }, [navigate]);
+  }, [navigate, refreshKey]);
 
   const handleClose = () => setShowSidebar(false);
   const handleShow = () => setShowSidebar(true);

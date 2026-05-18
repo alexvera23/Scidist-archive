@@ -901,7 +901,7 @@ app.post('/api/v1/themes/me', async (req, res) => {
   }
 });
 
-// 3. Eliminar Tema (RESTRICCIÓN: Solo si está vacío)
+// 3. Eliminar Tema (Reasigna archivos huérfanos a General/Otros)
 app.delete('/api/v1/themes/me/:themeId', async (req, res) => {
   try {
     const owner_id = req.headers['x-user-id'];
@@ -909,23 +909,38 @@ app.delete('/api/v1/themes/me/:themeId', async (req, res) => {
 
     const theme = await Theme.findOne({ _id: themeId, owner_id });
     if (!theme) return res.status(404).json({ error: 'Tema no encontrado' });
-    if (theme.name.toLowerCase() === 'general') return res.status(400).json({ error: 'No puedes borrar General' });
-
-    // VERIFICACIÓN: ¿Tiene archivos?
-    const filesCount = await Article.countDocuments({ theme_id: themeId, owner_id });
-    if (filesCount > 0) {
-      return res.status(400).json({ error: 'No puedes eliminar un tema que contiene archivos. Mueve o elimina los archivos primero.' });
+    
+    // Protegemos la categoría "General"
+    if (theme.name.toLowerCase() === 'general') {
+      return res.status(400).json({ error: 'No se puede eliminar la categoría General' });
     }
 
-    await Subtheme.deleteMany({ parent_theme_id: themeId });
+    // Buscamos la carpeta General y su subtema Otros del usuario actual
+    const generalTheme = await Theme.findOne({ name: 'General', owner_id });
+    const othersSubtheme = generalTheme
+      ? await Subtheme.findOne({ name: 'Otros', parent_theme_id: generalTheme._id, owner_id })
+      : null;
+
+    if (generalTheme && othersSubtheme) {
+      // Reasignar todos los artículos de este tema a General -> Otros
+      await Article.updateMany(
+        { theme_id: themeId, owner_id },
+        { theme_id: generalTheme._id, subtheme_id: othersSubtheme._id }
+      );
+    }
+
+    // Borrar todos los subtemas asociados y finalmente el tema
+    await Subtheme.deleteMany({ parent_theme_id: themeId, owner_id });
     await Theme.findByIdAndDelete(themeId);
-    res.json({ message: 'Tema eliminado' });
+    
+    res.json({ message: `Tema "${theme.name}" eliminado. Sus archivos se movieron a General.` });
   } catch (error) {
-    res.status(500).json({ error: 'Error al eliminar' });
+    console.error('Error al eliminar tema:', error);
+    res.status(500).json({ error: 'Error interno al procesar la eliminación del tema' });
   }
 });
 
-// 4. Eliminar Subtema (RESTRICCIÓN: Solo si está vacío)
+// 4. Eliminar Subtema (Reasigna archivos a "Otros" del mismo tema padre)
 app.delete('/api/v1/subthemes/me/:subthemeId', async (req, res) => {
   try {
     const owner_id = req.headers['x-user-id'];
@@ -933,18 +948,38 @@ app.delete('/api/v1/subthemes/me/:subthemeId', async (req, res) => {
 
     const subtheme = await Subtheme.findOne({ _id: subthemeId, owner_id });
     if (!subtheme) return res.status(404).json({ error: 'Subtema no encontrado' });
-    if (subtheme.name.toLowerCase() === 'otros') return res.status(400).json({ error: 'No puedes borrar la subcategoría Otros' });
 
-    // VERIFICACIÓN: ¿Tiene archivos?
-    const filesCount = await Article.countDocuments({ subtheme_id: subthemeId, owner_id });
-    if (filesCount > 0) {
-      return res.status(400).json({ error: 'No puedes eliminar un subtema que contiene archivos.' });
+    // Protecciones de seguridad para carpetas por defecto
+    if (subtheme.name.toLowerCase() === 'otros') {
+      return res.status(400).json({ error: 'No puedes borrar la subcategoría principal "Otros"' });
+    }
+    const parentTheme = await Theme.findById(subtheme.parent_theme_id);
+    if (parentTheme?.name.toLowerCase() === 'general' && subtheme.name.toLowerCase() === 'otros') {
+      return res.status(400).json({ error: 'No se puede eliminar la carpeta raíz de General/Otros' });
     }
 
+    // Buscar el subtema "Otros" que pertenece al MISMO tema padre
+    const othersInParent = await Subtheme.findOne({
+      name: 'Otros',
+      parent_theme_id: subtheme.parent_theme_id,
+      owner_id
+    });
+
+    if (othersInParent) {
+      // Movemos los archivos de esta subcategoría a la subcategoría "Otros" local
+      await Article.updateMany(
+        { subtheme_id: subthemeId, owner_id },
+        { subtheme_id: othersInParent._id }
+      );
+    }
+
+    // Eliminar el subtema
     await Subtheme.findByIdAndDelete(subthemeId);
-    res.json({ message: 'Subtema eliminado' });
+    
+    res.json({ message: `Subtema "${subtheme.name}" eliminado. Sus archivos pasaron a "Otros".` });
   } catch (error) {
-    res.status(500).json({ error: 'Error al eliminar' });
+    console.error('Error al eliminar subtema:', error);
+    res.status(500).json({ error: 'Error interno al procesar la eliminación del subtema' });
   }
 });
 

@@ -300,13 +300,28 @@ const handleCloseModal = () => {
       setSelectedCatalogSubtheme('');
       fetchCategoryData(); // Refrescamos el modal
       setRefreshKey(prev => prev + 1); // Refrescamos el Sidebar del Layout principal
+
     } catch (err) {
       alert("Error al dar de alta la categoría en tu cuenta.");
     }
   };
 
+  // Eliminar Categoría
+  const handleDeleteCategory = async (id, isSubtheme = false) => {
+    const storedUser = JSON.parse(localStorage.getItem('user'));
+    const endpoint = isSubtheme ? `/subthemes/me/${id}` : `/themes/me/${id}`;
+    
+    try {
+      await api.delete(endpoint, { headers: { 'x-user-id': storedUser.id } });
+      fetchCategoryTree();
+      setRefreshKey(prev => prev + 1); 
+    } catch (err) {
+      alert(err.response?.data?.error || "Error al eliminar. Revisa si hay archivos dentro.");
+    }
+  };
+
   return (
-    <AppLayout onSelectCategory={setCurrentFilter} categoryCounts={fileCounts}>
+    <AppLayout onSelectCategory={setCurrentFilter} categoryCounts={fileCounts}refreshKey={refreshKey}>
 
       {/* HEADER DINÁMICO CON ÍCONO */}
       <div className="main-header mb-5 d-flex align-items-center gap-3">
