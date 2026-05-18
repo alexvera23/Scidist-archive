@@ -406,6 +406,37 @@ body {
   color: var(--open);
 }
 
+.Tematica{
+    font-family: 'DM Mono', monospace;
+  font-size: 0.60rem;
+  text-transform: uppercase;
+  border: 1.5px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  padding: 0.5rem 1.2rem;
+  transition: 0.3s;
+}
+.Tematica:hover{
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.Subtematica{
+    font-family: 'DM Mono', monospace;
+  font-size: 0.60rem;
+  text-transform: uppercase;
+  border: 1.5px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  padding: 0.5rem 1.2rem;
+  transition: 0.3s;
+}
+
+.Subtematica:hover{
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
 .cerrar{
    font-family: 'DM Mono', monospace;
   font-size: 0.75rem;
