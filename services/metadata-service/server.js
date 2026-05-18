@@ -841,5 +841,157 @@ app.delete('/api/v1/admin/subthemes/:subthemeId', async (req, res) => {
   }
 });
 
+// ==========================================
+//    ENDPOINTS DE CATEGORÍAS (USUARIO)
+// ==========================================
+
+// 1. Obtener el árbol del usuario logueado
+app.get('/api/v1/themes/me', async (req, res) => {
+  try {
+    const owner_id = req.headers['x-user-id'];
+    if (!owner_id) return res.status(401).json({ error: 'Falta cabecera x-user-id' });
+
+    const [themes, subthemes] = await Promise.all([
+      Theme.find({ owner_id }).lean(),
+      Subtheme.find({ owner_id }).lean(),
+    ]);
+
+    const tree = themes.map((theme) => ({
+      id: theme._id,
+      name: theme.name,
+      subthemes: subthemes
+        .filter((sub) => sub.parent_theme_id.toString() === theme._id.toString())
+        .map((sub) => ({ id: sub._id, name: sub.name })),
+    }));
+    res.json(tree);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener categorías' });
+  }
+});
+
+// 2. Añadir nuevas temáticas/subtemáticas
+app.post('/api/v1/themes/me', async (req, res) => {
+  try {
+    const owner_id = req.headers['x-user-id'];
+    const { preferences } = req.body;
+    if (!owner_id) return res.status(401).json({ error: 'No autorizado' });
+
+    const results = [];
+    for (const [themeName, subthemes] of Object.entries(preferences)) {
+      if (themeName.toLowerCase() === 'general') continue;
+      
+      let theme = await Theme.findOne({ name: themeName, owner_id });
+      if (!theme) {
+        theme = await Theme.create({ name: themeName, owner_id });
+        await Subtheme.create({ name: 'Otros', parent_theme_id: theme._id, owner_id });
+      }
+
+      for (const subName of subthemes) {
+        if (subName.toLowerCase() === 'otros') continue;
+        const exists = await Subtheme.findOne({ name: subName, parent_theme_id: theme._id });
+        if (!exists) {
+          await Subtheme.create({ name: subName, parent_theme_id: theme._id, owner_id });
+        }
+      }
+      results.push(themeName);
+    }
+    res.json({ message: 'Categorías actualizadas', themes: results });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al guardar categorías' });
+  }
+});
+
+// 3. Eliminar Tema (Reasigna archivos huérfanos a General/Otros)
+app.delete('/api/v1/themes/me/:themeId', async (req, res) => {
+  try {
+    const owner_id = req.headers['x-user-id'];
+    const { themeId } = req.params;
+
+    const theme = await Theme.findOne({ _id: themeId, owner_id });
+    if (!theme) return res.status(404).json({ error: 'Tema no encontrado' });
+    
+    // Protegemos la categoría "General"
+    if (theme.name.toLowerCase() === 'general') {
+      return res.status(400).json({ error: 'No se puede eliminar la categoría General' });
+    }
+
+    // Buscamos la carpeta General y su subtema Otros del usuario actual
+    const generalTheme = await Theme.findOne({ name: 'General', owner_id });
+    const othersSubtheme = generalTheme
+      ? await Subtheme.findOne({ name: 'Otros', parent_theme_id: generalTheme._id, owner_id })
+      : null;
+
+    if (generalTheme && othersSubtheme) {
+      // Reasignar todos los artículos de este tema a General -> Otros
+      await Article.updateMany(
+        { theme_id: themeId, owner_id },
+        { theme_id: generalTheme._id, subtheme_id: othersSubtheme._id }
+      );
+    }
+
+    // Borrar todos los subtemas asociados y finalmente el tema
+    await Subtheme.deleteMany({ parent_theme_id: themeId, owner_id });
+    await Theme.findByIdAndDelete(themeId);
+    
+    res.json({ message: `Tema "${theme.name}" eliminado. Sus archivos se movieron a General.` });
+  } catch (error) {
+    console.error('Error al eliminar tema:', error);
+    res.status(500).json({ error: 'Error interno al procesar la eliminación del tema' });
+  }
+});
+
+// 4. Eliminar Subtema (Reasigna archivos a "Otros" del mismo tema padre)
+app.delete('/api/v1/subthemes/me/:subthemeId', async (req, res) => {
+  try {
+    const owner_id = req.headers['x-user-id'];
+    const { subthemeId } = req.params;
+
+    const subtheme = await Subtheme.findOne({ _id: subthemeId, owner_id });
+    if (!subtheme) return res.status(404).json({ error: 'Subtema no encontrado' });
+
+    // Protecciones de seguridad para carpetas por defecto
+    if (subtheme.name.toLowerCase() === 'otros') {
+      return res.status(400).json({ error: 'No puedes borrar la subcategoría principal "Otros"' });
+    }
+    const parentTheme = await Theme.findById(subtheme.parent_theme_id);
+    if (parentTheme?.name.toLowerCase() === 'general' && subtheme.name.toLowerCase() === 'otros') {
+      return res.status(400).json({ error: 'No se puede eliminar la carpeta raíz de General/Otros' });
+    }
+
+    // Buscar el subtema "Otros" que pertenece al MISMO tema padre
+    const othersInParent = await Subtheme.findOne({
+      name: 'Otros',
+      parent_theme_id: subtheme.parent_theme_id,
+      owner_id
+    });
+
+    if (othersInParent) {
+      // Movemos los archivos de esta subcategoría a la subcategoría "Otros" local
+      await Article.updateMany(
+        { subtheme_id: subthemeId, owner_id },
+        { subtheme_id: othersInParent._id }
+      );
+    }
+
+    // Eliminar el subtema
+    await Subtheme.findByIdAndDelete(subthemeId);
+    
+    res.json({ message: `Subtema "${subtheme.name}" eliminado. Sus archivos pasaron a "Otros".` });
+  } catch (error) {
+    console.error('Error al eliminar subtema:', error);
+    res.status(500).json({ error: 'Error interno al procesar la eliminación del subtema' });
+  }
+});
+
+// GET: Obtener el catálogo maestro de categorías globales
+app.get('/api/v1/categories/catalog', async (req, res) => {
+  try {
+    // Retornamos directamente el catálogo estático que definiste al inicio
+    res.json(CATALOGO_CATEGORIAS);
+  } catch (error) {
+    res.status(500).json({ error: "Error al obtener el catálogo maestro" });
+  }
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(` Metadata Service escuchando en puerto ${PORT}`));

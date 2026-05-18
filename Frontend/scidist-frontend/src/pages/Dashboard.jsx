@@ -6,13 +6,13 @@ import api from '../api/axiosConfig';
 import '../assets/css/app-styles.css';
 import { Modal, Button, Spinner } from 'react-bootstrap';
 // Datos de prueba (luego vendrán del backend)
-const MOCK_FILES = [
-  { id: 1, name: 'Arquitectura_P2P.pdf', size: '2.4 MB', date: '04 May 2026', category: 'Redes', subcategory: 'Topologías' },
-  { id: 2, name: 'modelo_entrenamiento.py', size: '15 KB', date: '03 May 2026', category: 'Inteligencia Artificial', subcategory: 'Machine Learning' },
-  { id: 3, name: 'server_gateway.js', size: '8 KB', date: '02 May 2026', category: 'Desarrollo de Software', subcategory: 'Backend' },
-  { id: 4, name: 'apuntes_protocolos.docx', size: '1.1 MB', date: '01 May 2026', category: 'Redes', subcategory: 'Protocolos' },
-  { id: 5, name: 'diagrama_db.png', size: '3.5 MB', date: '28 Abr 2026', category: 'General', subcategory: 'Otros' }
-];
+// const MOCK_FILES = [
+//   { id: 1, name: 'Arquitectura_P2P.pdf', size: '2.4 MB', date: '04 May 2026', category: 'Redes', subcategory: 'Topologías' },
+//   { id: 2, name: 'modelo_entrenamiento.py', size: '15 KB', date: '03 May 2026', category: 'Inteligencia Artificial', subcategory: 'Machine Learning' },
+//   { id: 3, name: 'server_gateway.js', size: '8 KB', date: '02 May 2026', category: 'Desarrollo de Software', subcategory: 'Backend' },
+//   { id: 4, name: 'apuntes_protocolos.docx', size: '1.1 MB', date: '01 May 2026', category: 'Redes', subcategory: 'Protocolos' },
+//   { id: 5, name: 'diagrama_db.png', size: '3.5 MB', date: '28 Abr 2026', category: 'General', subcategory: 'Otros' }
+// ];
 
 export default function Dashboard() {
   const [currentFilter, setCurrentFilter] = useState('todos');
@@ -29,6 +29,15 @@ export default function Dashboard() {
   const [isViewLoading, setIsViewLoading] = useState(false);
   const [activeFileTitle, setActiveFileTitle] = useState('');
   const [fileType, setFileType] = useState('pdf');
+  // ── ESTADOS REFACTORIZADOS PARA EL CATÁLOGO ──
+  const [showCatModal, setShowCatModal] = useState(false);
+  const [categoryTree, setCategoryTree] = useState([]); // Carpetas activas del usuario
+  const [globalCatalog, setGlobalCatalog] = useState([]); // Catálogo maestro del backend
+  
+  // Selección controlada por dropdowns
+  const [selectedCatalogTheme, setSelectedCatalogTheme] = useState('');
+  const [selectedCatalogSubtheme, setSelectedCatalogSubtheme] = useState('');
+  const [isCatLoading, setIsCatLoading] = useState(false);
 
   useEffect(() => {
     const fetchFiles = async () => {
@@ -233,11 +242,114 @@ const handleCloseModal = () => {
     }
   };
 
+  // 1. Cargar tanto las categorías del usuario como el catálogo global
+  const fetchCategoryData = async () => {
+    const storedUser = JSON.parse(localStorage.getItem('user'));
+    if (!storedUser) return;
+    
+    try {
+      setIsCatLoading(true);
+      // Hacemos ambas peticiones en paralelo
+      const [userTreeRes, catalogRes] = await Promise.all([
+        api.get('/themes/me', { headers: { 'x-user-id': storedUser.id } }),
+        api.get('/categories/catalog')
+      ]);
+      
+      setCategoryTree(userTreeRes.data);
+      // Filtramos "General" del catálogo para que no lo intenten re-añadir
+      setGlobalCatalog(catalogRes.data.filter(c => c.name.toLowerCase() !== 'general'));
+    } catch (err) {
+      console.error("Error cargando estructuras de carpetas:", err);
+    } finally {
+      setIsCatLoading(false);
+    }
+  };
+
+  const handleOpenCategories = () => {
+    fetchCategoryData();
+    // Limpiamos selecciones anteriores
+    setSelectedCatalogTheme('');
+    setSelectedCatalogSubtheme('');
+    setShowCatModal(true);
+  };
+
+  // 2. Obtener la lista de subtemas disponibles basándonos en el tema seleccionado
+  const availableSubthemes = useMemo(() => {
+    const matchedTheme = globalCatalog.find(c => c.name === selectedCatalogTheme);
+    return matchedTheme ? matchedTheme.subthemes : [];
+  }, [selectedCatalogTheme, globalCatalog]);
+
+  // 3. Enviar la selección predefinida al servidor
+  const handleAddCategory = async (e) => {
+    e.preventDefault();
+    if (!selectedCatalogTheme) return alert("Por favor, selecciona al menos una temática principal.");
+    
+    const storedUser = JSON.parse(localStorage.getItem('user'));
+    
+    // Armamos el objeto con la estructura que espera tu backend
+    const payload = {
+      preferences: {
+        [selectedCatalogTheme]: selectedCatalogSubtheme ? [selectedCatalogSubtheme] : []
+      }
+    };
+
+    try {
+      await api.post('/themes/me', payload, { headers: { 'x-user-id': storedUser.id } });
+      
+      // Limpiamos selección secundaria
+      setSelectedCatalogSubtheme('');
+      fetchCategoryData(); // Refrescamos el modal
+      setRefreshKey(prev => prev + 1); // Refrescamos el Sidebar del Layout principal
+      alert("Categoria creada correctamente")
+
+    } catch (err) {
+      alert("Error al dar de alta la categoría en tu cuenta.");
+    }
+  };
+
+// Eliminar Categoría
+  const handleDeleteCategory = async (id, isSubtheme = false, e) => {
+    // 1. Detenemos cualquier propagación accidental
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    const storedUser = JSON.parse(localStorage.getItem('user'));
+    const endpoint = isSubtheme ? `/subthemes/me/${id}` : `/themes/me/${id}`;
+    
+    try {
+      await api.delete(endpoint, { headers: { 'x-user-id': storedUser.id } });
+      
+      // 2. CORRECCIÓN: Usamos el nombre correcto de la función
+      await fetchCategoryData();
+      setRefreshKey(prev => prev + 1);
+      alert("Categoria eliminada correctamente"); 
+
+    } catch (err) {
+      const errorStatus = err.response?.status;
+      
+      // 3. Falso negativo (error 404)
+      if (errorStatus === 404) {
+        console.warn(" La categoría ya no existe en el servidor (Borrado exitoso previo).");
+        // CORRECCIÓN AQUÍ TAMBIÉN:
+        await fetchCategoryData();
+        setRefreshKey(prev => prev + 1);
+        return; 
+      }
+
+      // Si es un error real, lo logueamos y avisamos al usuario
+      console.error(" Error real capturado:", err);
+      console.error("Respuesta del servidor:", err.response?.data);
+      alert(err.response?.data?.error || "Error al eliminar. Revisa la consola para más detalles.");
+    }
+  };
+
   return (
-    <AppLayout onSelectCategory={setCurrentFilter} categoryCounts={fileCounts}>
+    <AppLayout onSelectCategory={setCurrentFilter} categoryCounts={fileCounts}refreshKey={refreshKey}>
 
       {/* HEADER DINÁMICO CON ÍCONO */}
-      <div className="main-header mb-5 d-flex align-items-center gap-3">
+      <div className="main-header mb-5 d-flex align-items-center gap-3 ">
         <i className={`bi ${getIconForCategory(currentFilter)}`} style={{ fontSize: '2.5rem', color: 'var(--accent)' }}></i>
         <div>
           <h1 className="m-0">
@@ -247,7 +359,13 @@ const handleCloseModal = () => {
           </h1>
           <p className="text-muted m-0 mt-1">Clasificación inteligente de recursos</p>
         </div>
+
+        {/* NUEVO BOTÓN: GESTIONAR CATEGORÍAS */}
+        <button className="btn btn-outline-secondary rounded-pill px-3 " onClick={handleOpenCategories}>
+          <i className="bi bi-folder-plus me-2"></i>Organizar Carpetas
+        </button>
       </div>
+      
 
       {/* TARJETAS DE ESTADÍSTICAS (con datos reales) */}
       <div className="row g-0 stats-row mb-5">
@@ -438,6 +556,107 @@ const handleCloseModal = () => {
             </Button>
           </Modal.Footer>
         </Modal>
+
+        {/* MODAL: GESTIÓN DE CATEGORÍAS */}
+      <Modal show={showCatModal} onHide={() => setShowCatModal(false)} centered className="file-viewer-modal">
+        <Modal.Header closeButton closeVariant="white" className="border-secondary">
+          <Modal.Title style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '1px' }}>
+            GESTIÓN DE <span className="accent">CARPETAS</span>
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="border-secondary">
+          
+          {/* Formulario Estricto por Selección de Catálogo */}
+          <div className="mb-4 p-3 rounded" style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)' }}>
+            <h6 className="fw-bold mb-3" style={{ color: 'var(--accent)' }}>
+              <i className="bi bi-plus-circle me-2"></i>Habilitar Temática Autorizada
+            </h6>
+            <form onSubmit={handleAddCategory}>
+              <div className="row g-2">
+                
+                {/* Selector 1: Temáticas Globales */}
+                <div className="col-12 col-sm-5">
+                  <label className="font-monospace small opacity-50 d-block mb-1">TEMÁTICA PRINCIPAL</label>
+                  <select 
+                    className="form-select  border-secondary Tematica"
+                    value={selectedCatalogTheme}
+                    onChange={(e) => { setSelectedCatalogTheme(e.target.value); setSelectedCatalogSubtheme(''); }}
+                    required
+                  >
+                    <option value="">-- Selecciona un área --</option>
+                    {globalCatalog.map(cat => (
+                      <option key={cat.id} value={cat.name}>{cat.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Selector 2: Subtemáticas vinculadas al catálogo */}
+                <div className="col-12 col-sm-4">
+                  <label className="font-monospace small opacity-50 d-block mb-1">SUBCATEGORÍA (OPCIONAL)</label>
+                  <select 
+                    className="form-select border-secondary Subtematica"
+                    value={selectedCatalogSubtheme}
+                    onChange={(e) => setSelectedCatalogSubtheme(e.target.value)}
+                    disabled={!selectedCatalogTheme}
+                  >
+                    <option value="">-- Todo el módulo ("Otros") --</option>
+                    {availableSubthemes.map(sub => (
+                      // Evitamos duplicar la opción por defecto en el selector
+                      sub.toLowerCase() !== 'otros' && <option key={sub} value={sub}>{sub}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Botón de envío */}
+                <div className="col-12 col-sm-3 d-flex align-items-end">
+                  <button type="submit" className="btn w-100 complet" style={{ height: '38px' }} disabled={!selectedCatalogTheme}>Activar
+                  </button>
+                </div>
+
+              </div>
+            </form>
+          </div>
+
+          {/* Lista de Categorías Existentes */}
+          <h6 className="fw-bold mb-3 text-muted"><i className="bi bi-diagram-3 me-2 Titulo"></i>Estructura Actual</h6>
+          {isCatLoading ? <div className="text-center"><Spinner animation="border" size="sm" /></div> : (
+            <div style={{ maxHeight: '40vh', overflowY: 'auto' }} className="pe-2">
+              {categoryTree.map(theme => (
+                <div key={theme.id} className="mb-3 p-3 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <div className="d-flex justify-content-between align-items-center mb-2">
+                    <strong className="fs-5">{theme.name}</strong>
+                    {theme.name.toLowerCase() !== 'general' && (
+                      <button 
+                        className="btn btn-sm btn-outline-danger border-0" 
+                        onClick={(e) => handleDeleteCategory(theme.id, false, e)} 
+                        title="Eliminar Tema"
+                      >
+                        <i className="bi bi-trash"></i>
+                      </button>
+                    )}
+                  </div>
+                  <div className="ps-3 border-start border-secondary ms-2">
+                    {theme.subthemes.map(sub => (
+                      <div key={sub.id} className="d-flex justify-content-between align-items-center py-1">
+                        <span className="text-muted small"><i className="bi bi-arrow-return-right me-2"></i>{sub.name}</span>
+                        {sub.name.toLowerCase() !== 'otros' && (
+                          <button 
+                            className="btn btn-sm btn-link text-danger p-0" 
+                            onClick={(e) => handleDeleteCategory(sub.id, true, e)} 
+                            title="Eliminar Subtema"
+                          >
+                            <i className="bi bi-x-circle"></i>
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Modal.Body>
+      </Modal>
 
     </AppLayout>
   );

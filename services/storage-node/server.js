@@ -134,7 +134,7 @@ async function processReplicationTasks() {
         if (targetFileName) {
           try {
             fs.unlinkSync(path.join(UPLOADS_DIR, targetFileName));
-            console.log(`[P2P Worker] 🗑️ Archivo borrado físicamente.`);
+            console.log(`[P2P Worker]  Archivo borrado físicamente.`);
           } catch (e) {
             console.error(`[P2P Worker] Error físico al borrar:`, e.message);
           }

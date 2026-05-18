@@ -75,44 +75,46 @@ app.post('/api/v1/upload', upload.single('file'), async (req, res) => {
   const originalName = req.file.originalname;
   const extension = path.extname(originalName).toLowerCase();
 
+  // 1. NUEVA VALIDACIÓN: Bloqueo estricto para aceptar solo PDFs
+  if (extension !== '.pdf') {
+    fs.unlinkSync(tempPath); // Limpiamos la basura temporal
+    return res.status(400).json({ error: 'Formato no soportado. El sistema solo acepta archivos PDF.' });
+  }
+
   try {
     const fileBuffer = fs.readFileSync(tempPath);
     
-    // 1. Calcular Hash
+    // 2. Calcular Hash
     const hashSum = crypto.createHash('sha256');
     hashSum.update(fileBuffer);
     const fileHash = hashSum.digest('hex');
 
-    // 2. EXTRAER TEXTO PARA LA IA
+    // 3. EXTRAER TEXTO PARA LA IA (Exclusivo para PDF)
     let extractedText = "";
     try {
-      if (extension === '.pdf') {
-        const uint8Array = new Uint8Array(fileBuffer);
-        const loadingTask = pdfjsLib.getDocument({ data: uint8Array });
-        const pdfDocument = await loadingTask.promise;
-        
-        // Solo leer las primeras 3 páginas para no saturar la memoria
-        const numPages = Math.min(3, pdfDocument.numPages); 
-        let fullText = "";
+      const uint8Array = new Uint8Array(fileBuffer);
+      const loadingTask = pdfjsLib.getDocument({ data: uint8Array });
+      const pdfDocument = await loadingTask.promise;
+      
+      // Solo leer las primeras 3 páginas para no saturar la memoria
+      const numPages = Math.min(3, pdfDocument.numPages); 
+      let fullText = "";
 
-        for (let i = 1; i <= numPages; i++) {
-          const page = await pdfDocument.getPage(i);
-          const textContent = await page.getTextContent();
-          const pageText = textContent.items.map(item => item.str).join(' ');
-          fullText += pageText + " ";
-        }
-        
-        // Limpiamos un poco el texto y lo cortamos
-        extractedText = fullText.replace(/\s+/g, ' ').substring(0, 2500);
-      } else if (extension === '.txt') {
-        extractedText = fileBuffer.toString('utf-8').substring(0, 2500);
+      for (let i = 1; i <= numPages; i++) {
+        const page = await pdfDocument.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map(item => item.str).join(' ');
+        fullText += pageText + " ";
       }
+      
+      // Limpiamos un poco el texto y lo cortamos
+      extractedText = fullText.replace(/\s+/g, ' ').substring(0, 2500);
     } catch (parseError) {
-      console.error('[Gateway]  Advertencia: No se pudo extraer texto para la IA:', parseError.message);
+      console.error('[Gateway] Advertencia: No se pudo extraer texto para la IA:', parseError.message);
       // No rompemos el flujo. Si no hay texto, irá a la categoría "General"
     }
 
-    // 3. OBTENER CATEGORÍAS DEL USUARIO
+    // 4. OBTENER CATEGORÍAS DEL USUARIO
     let candidateLabels = [];
     let categoryMap = {}; // Para saber qué ID corresponde a cada nombre
     let generalThemeId = null;
@@ -140,7 +142,7 @@ app.post('/api/v1/upload', upload.single('file'), async (req, res) => {
       console.error('[Gateway] Error obteniendo categorías:', catError.message);
     }
 
-    // 4. VALIDACIÓN Y CLASIFICACIÓN CON IA
+    // 5. VALIDACIÓN Y CLASIFICACIÓN CON IA
     let finalThemeId = generalThemeId; 
     let finalSubthemeId = null;
 
@@ -159,16 +161,16 @@ app.post('/api/v1/upload', upload.single('file'), async (req, res) => {
         const validationConfidence = validationResponse.data.confidence;
 
         if (!isValid || validationConfidence < 0.4) {
-          console.log(`[Gateway]  Archivo rechazado: No parece un artículo científico (${(validationConfidence*100).toFixed(1)}%)`);
+          console.log(`[Gateway] Archivo rechazado: No parece un artículo científico (${(validationConfidence*100).toFixed(1)}%)`);
           fs.unlinkSync(tempPath);
           return res.status(400).json({ 
             error: "El archivo no cumple con la estructura de un artículo científico (IMRyD)." 
           });
         }
 
-        console.log(`[Gateway]  Estructura validada con ${(validationConfidence*100).toFixed(1)}% de confianza.`);
+        console.log(`[Gateway] Estructura validada con ${(validationConfidence*100).toFixed(1)}% de confianza.`);
 
-        // --- PASO B: CLASIFICACIÓN TEMÁTICA (Solo si pasó el paso A) ---
+        // --- PASO B: CLASIFICACIÓN TEMÁTICA ---
         const aiResponse = await axios.post('http://classifier-service:8000/classify', {
           text: extractedText,
           candidate_labels: candidateLabels
@@ -183,27 +185,23 @@ app.post('/api/v1/upload', upload.single('file'), async (req, res) => {
 
       } catch (aiError) {
         console.error('[Gateway] Error en validación IA:', aiError.message);
-        // En caso de error de la IA, podemos ser conservadores y mandarlo a General
       }
     }
 
-    // 5. CONSULTA DINÁMICA DE NODOS ACTIVOS
+    // 6. CONSULTA DINÁMICA DE NODOS ACTIVOS
     const activeNodes = await fetchActiveNodes();
     if (activeNodes.length === 0) {
       if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
       return res.status(503).json({ error: 'No hay nodos de almacenamiento disponibles en la red' });
     }
 
-    // 6. ENRUTAMIENTO P2P Y TRANSFERENCIA gRPC (CON FAILOVER)
+    // 7. ENRUTAMIENTO P2P Y TRANSFERENCIA gRPC (CON FAILOVER)
     const { primary: targetNode, replicas: replicaNodes } = getRoutingNodes(fileHash, activeNodes);
-    
-    // Armamos nuestra lista de candidatos: Primario primero, réplicas después
     const candidateNodes = [targetNode, ...replicaNodes];
     
     let uploadSuccess = false;
     let successfulNode = null;
 
-    // Intentamos subir el archivo iterando sobre los nodos disponibles
     for (const node of candidateNodes) {
       try {
         console.log(`[Gateway] Intentando subir a: ${node.node_id}`);
@@ -216,32 +214,30 @@ app.post('/api/v1/upload', upload.single('file'), async (req, res) => {
             resolve(response);
           });
 
-          // Escribimos los metadatos y el buffer del archivo
           call.write({ info: { file_hash: fileHash, extension: extension } });
-          call.write({ chunk: fileBuffer }); // Ya lo teníamos en memoria, muy conveniente
+          call.write({ chunk: fileBuffer });
           call.end();
         });
 
-        // Si la promesa se resuelve sin errores, marcamos el éxito y salimos del bucle
         uploadSuccess = true;
         successfulNode = node;
-        console.log(`[Gateway]  Subida exitosa a ${node.node_id}`);
+        console.log(`[Gateway] Subida exitosa a ${node.node_id}`);
         break; 
 
       } catch (grpcErr) {
-        console.warn(`[Gateway]  Falló gRPC en ${node.node_id}. Saltando al siguiente...`);
+        console.warn(`[Gateway] Falló gRPC en ${node.node_id}. Saltando al siguiente...`);
       }
     }
 
-    // Ya no necesitamos el archivo temporal, lo borramos siempre
-    fs.unlinkSync(tempPath);
+    // Borrado del archivo temporal siempre al finalizar el intento gRPC
+    if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
 
     if (!uploadSuccess) {
       return res.status(503).json({ error: 'Error crítico: Ningún nodo de la red pudo recibir el archivo.' });
     }
-     // 7. GUARDAR EN BASE DE DATOS DISTRIBUIDA
+    
+    // 8. GUARDAR EN BASE DE DATOS DISTRIBUIDA
     try {
-      // Determinamos quiénes quedan como réplicas basándonos en el nodo que realmente respondió
       const finalReplicas = candidateNodes
         .map(n => n.node_id)
         .filter(id => id !== successfulNode.node_id);
@@ -252,11 +248,11 @@ app.post('/api/v1/upload', upload.single('file'), async (req, res) => {
         owner_id: userId,          
         theme_id: finalThemeId,        
         subtheme_id: finalSubthemeId,  
-        node_id: successfulNode.node_id, // El héroe que respondió
+        node_id: successfulNode.node_id, 
         replicas: finalReplicas 
       };
 
-      const metadataResponse = await axios.post('http://metadata-service:3001/api/v1/articles', metadataPayload);
+      await axios.post('http://metadata-service:3001/api/v1/articles', metadataPayload);
       
       res.status(200).json({
         message: 'Archivo analizado por IA, distribuido y registrado',
@@ -578,6 +574,53 @@ app.delete('/api/v1/admin/subthemes/:subthemeId', checkAdmin, async (req, res) =
     res.status(error.response?.status || 500).json(
       error.response?.data || { error: 'Error interno' }
     );
+  }
+});
+
+// ==========================================
+//    PUENTES DE CATEGORÍAS (USUARIO)
+// ==========================================
+
+app.get('/api/v1/themes/me', async (req, res) => {
+  const userId = req.headers['x-user-id'];
+  if (!userId) return res.status(401).json({ error: 'No autorizado' });
+  try {
+    const response = await axios.get(`http://metadata-service:3001/api/v1/themes/me`, { headers: { 'x-user-id': userId } });
+    res.json(response.data);
+  } catch (error) { res.status(error.response?.status || 500).json(error.response?.data || { error: 'Error' }); }
+});
+
+app.post('/api/v1/themes/me', async (req, res) => {
+  const userId = req.headers['x-user-id'];
+  if (!userId) return res.status(401).json({ error: 'No autorizado' });
+  try {
+    const response = await axios.post(`http://metadata-service:3001/api/v1/themes/me`, req.body, { headers: { 'x-user-id': userId } });
+    res.json(response.data);
+  } catch (error) { res.status(error.response?.status || 500).json(error.response?.data || { error: 'Error' }); }
+});
+
+app.delete('/api/v1/themes/me/:id', async (req, res) => {
+  const userId = req.headers['x-user-id'];
+  try {
+    const response = await axios.delete(`http://metadata-service:3001/api/v1/themes/me/${req.params.id}`, { headers: { 'x-user-id': userId } });
+    res.json(response.data);
+  } catch (error) { res.status(error.response?.status || 500).json(error.response?.data || { error: 'Error' }); }
+});
+
+app.delete('/api/v1/subthemes/me/:id', async (req, res) => {
+  const userId = req.headers['x-user-id'];
+  try {
+    const response = await axios.delete(`http://metadata-service:3001/api/v1/subthemes/me/${req.params.id}`, { headers: { 'x-user-id': userId } });
+    res.json(response.data);
+  } catch (error) { res.status(error.response?.status || 500).json(error.response?.data || { error: 'Error' }); }
+});
+// Puente para obtener el catálogo maestro global
+app.get('/api/v1/categories/catalog', async (req, res) => {
+  try {
+    const response = await axios.get('http://metadata-service:3001/api/v1/categories/catalog');
+    res.json(response.data);
+  } catch (error) {
+    res.status(error.response?.status || 500).json({ error: "Error de comunicación con el servicio de metadatos" });
   }
 });
 
