@@ -948,5 +948,15 @@ app.delete('/api/v1/subthemes/me/:subthemeId', async (req, res) => {
   }
 });
 
+// GET: Obtener el catálogo maestro de categorías globales
+app.get('/api/v1/categories/catalog', async (req, res) => {
+  try {
+    // Retornamos directamente el catálogo estático que definiste al inicio
+    res.json(CATALOGO_CATEGORIAS);
+  } catch (error) {
+    res.status(500).json({ error: "Error al obtener el catálogo maestro" });
+  }
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(` Metadata Service escuchando en puerto ${PORT}`));

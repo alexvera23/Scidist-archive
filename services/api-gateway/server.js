@@ -614,6 +614,15 @@ app.delete('/api/v1/subthemes/me/:id', async (req, res) => {
     res.json(response.data);
   } catch (error) { res.status(error.response?.status || 500).json(error.response?.data || { error: 'Error' }); }
 });
+// Puente para obtener el catálogo maestro global
+app.get('/api/v1/categories/catalog', async (req, res) => {
+  try {
+    const response = await axios.get('http://metadata-service:3001/api/v1/categories/catalog');
+    res.json(response.data);
+  } catch (error) {
+    res.status(error.response?.status || 500).json({ error: "Error de comunicación con el servicio de metadatos" });
+  }
+});
 
 
 
