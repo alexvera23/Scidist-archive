@@ -3,19 +3,89 @@ import '../assets/css/index-styles.css';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 
+const features = [
+  {
+    icon: 'bi-file-earmark-pdf',
+    title: 'Carga de artículos PDF',
+    text: 'Sube artículos científicos y visualiza su estado de análisis desde una interfaz limpia y ordenada.'
+  },
+  {
+    icon: 'bi-diagram-3',
+    title: 'Clasificación por áreas',
+    text: 'Organiza documentos por áreas y subáreas como Computación, Medicina, Física, Humanidades o IA.'
+  },
+  {
+    icon: 'bi-cpu',
+    title: 'Análisis inteligente',
+    text: 'El sistema interpreta el contenido del archivo para proponer categorías relevantes de forma automática.'
+  },
+  {
+    icon: 'bi-search',
+    title: 'Búsqueda académica',
+    text: 'Encuentra artículos por nombre, tema, área, subárea o fecha sin perder tiempo revisando carpetas.'
+  },
+  {
+    icon: 'bi-shield-check',
+    title: 'Organización segura',
+    text: 'Administra tus documentos desde una plataforma pensada para mantener tu biblioteca científica protegida.'
+  },
+  {
+    icon: 'bi-bar-chart-line',
+    title: 'Panel de estadísticas',
+    text: 'Consulta cuántos artículos tienes por categoría, cuáles se analizaron y cómo crece tu repositorio.'
+  }
+];
+
+
+
+const distributedFeatures = [
+  {
+    icon: 'bi-eye',
+    title: 'Transparencia de acceso',
+    text: 'El usuario interactúa con una sola plataforma, aunque internamente los documentos, servicios y análisis puedan ejecutarse en diferentes módulos o nodos.'
+  },
+  {
+    icon: 'bi-hdd-network',
+    title: 'Transparencia de ubicación',
+    text: 'Los artículos se consultan desde el dashboard sin que el usuario tenga que saber en qué nodo, carpeta o servicio se encuentran almacenados.'
+  },
+  {
+    icon: 'bi-files',
+    title: 'Replicación de información',
+    text: 'El diseño puede contemplar copias de seguridad o nodos espejo para mantener disponibilidad de archivos y metadatos ante fallos.'
+  },
+  {
+    icon: 'bi-arrow-repeat',
+    title: 'Concurrencia controlada',
+    text: 'Varios usuarios pueden subir, consultar o clasificar documentos al mismo tiempo sin afectar la consistencia del repositorio.'
+  },
+  {
+    icon: 'bi-wifi',
+    title: 'Comunicación entre servicios',
+    text: 'La interfaz, el módulo de autenticación, el clasificador y el almacenamiento pueden comunicarse mediante peticiones cliente-servidor o APIs.'
+  },
+  {
+    icon: 'bi-shield-exclamation',
+    title: 'Tolerancia a fallos',
+    text: 'Si un proceso de análisis falla, el sistema puede conservar el archivo, marcar su estado y permitir reintentar la clasificación sin perder datos.'
+  }
+];
+
+const steps = [
+  'Sube tu artículo científico en PDF',
+  'Scidist analiza el contenido y metadatos',
+  'El documento se clasifica por área y subárea',
+  'Consulta, filtra y administra tu biblioteca'
+];
+
 function Scidist() {
   return (
-    <div className="d-flex flex-column min-vh-100">
-
-      {/* NAVBAR */}
+    <div className="scidist-page d-flex flex-column min-vh-100">
       <nav className="navbar navbar-expand-lg sticky-top custom-navbar">
-        <div className="container-fluid px-4">
-
-          <div className="d-flex align-items-center">
-            <a className="navbar-brand brand-logo m-0" href="#">
-              Scidist<span className="accent">-Archive</span>
-            </a>
-          </div>
+        <div className="container-fluid px-4 px-lg-5">
+          <a className="navbar-brand brand-logo m-0" href="#">
+            Scidist<span>-Archive</span>
+          </a>
 
           <button
             className="navbar-toggler custom-toggler"
@@ -30,277 +100,267 @@ function Scidist() {
           </button>
 
           <div className="collapse navbar-collapse" id="navbarSupportedContent">
-            <ul className="navbar-nav ms-auto mb-2 mb-lg-0 align-items-lg-center gap-lg-3">
-
+            <ul className="navbar-nav ms-auto mb-2 mb-lg-0 align-items-lg-center gap-lg-4">
               <li className="nav-item">
-                <a className="nav-link" href="#features">
-                  Funciones
-                </a>
+                <a className="nav-link" href="#features">Funciones</a>
               </li>
-
               <li className="nav-item">
-                <a className="nav-link" href="#about">
-                  Acerca de
-                </a>
+                <a className="nav-link" href="#distributed">Distribuido</a>
               </li>
-
               <li className="nav-item">
-                <a className="btn btn-success btn-ingresar" href="/auth">
-                  Ingresar
-                </a>
+                <a className="nav-link" href="#process">Proceso</a>
               </li>
-
+              <li className="nav-item">
+                <a className="nav-link" href="#about">Acerca de</a>
+              </li>
+              <li className="nav-item">
+                <a className="nav-login" href="/auth">Ingresar</a>
+              </li>
             </ul>
           </div>
-
         </div>
       </nav>
 
-      {/* MAIN */}
       <main>
-
-        {/* HERO */}
-        <section className="hero">
-
-          <div className="hero-text">
-            <p className="hero-eyebrow">
-              Clasificación Inteligente de Artículos Científicos
+        <section className="hero-section">
+          <div className="hero-content">
+            <p className="hero-tag">
+              <i className="bi bi-stars"></i>
+              Clasificación inteligente de artículos científicos
             </p>
 
             <h1>
-              Organiza tu <em>Mundo</em> Digital
+              Tu biblioteca académica, <span>ordenada en segundos.</span>
             </h1>
 
-            <p className="hero-desc">
-              Sube cualquier artículo científico y Scidist-Archive los
-              clasifica automáticamente por áreas y sub-áreas en segundos.
+            <p className="hero-description">
+              Scidist-Archive permite subir artículos científicos, analizarlos y clasificarlos automáticamente por áreas y subáreas para que tu investigación sea más fácil de consultar, filtrar y administrar.
             </p>
 
             <div className="hero-actions">
-              <a href="/login" className="btn-primary">
-                Comenzar Gratis
+              <a href="/auth" className="fv-primary-btn">
+                Comenzar ahora
+                <i className="bi bi-arrow-right"></i>
               </a>
-
-              <a href="#features" className="btn-secondary">
+              <a href="#features" className="fv-secondary-btn">
                 Ver funciones
               </a>
             </div>
+
+            <div className="hero-trust">
+              <div>
+                <strong>PDF</strong>
+                <span>Formato principal</span>
+              </div>
+              <div>
+                <strong>IA</strong>
+                <span>Clasificación asistida</span>
+              </div>
+              <div>
+                <strong>Nodos</strong>
+                <span>Diseño distribuido</span>
+              </div>
+            </div>
           </div>
 
-          <div className="hero-visual">
-
-            <div className="file-stack">
-
-              <div className="file-card">
-                <span className="file-card-ext">PDF</span>
-                <p className="file-card-name">Computación</p>
-                <div className="file-card-bar"></div>
+          <div className="hero-dashboard" aria-label="Vista previa del dashboard de Scidist-Archive">
+            <div className="dashboard-card main-card">
+              <div className="dashboard-topbar">
+                <div>
+                  <span className="mini-label">Sistema distribuido académico</span>
+                  <h3>Panel de artículos</h3>
+                </div>
+                <span className="status-pill">Analizando</span>
               </div>
 
-              <div className="file-card">
-                <span className="file-card-ext">PDF</span>
-                <p className="file-card-name">Física</p>
-                <div className="file-card-bar"></div>
+              <div className="upload-box">
+                <div className="upload-icon">
+                  <i className="bi bi-cloud-arrow-up"></i>
+                </div>
+                <div>
+                  <h4>Subir artículo PDF</h4>
+                  <p>Arrastra tu documento para clasificarlo automáticamente.</p>
+                </div>
               </div>
 
-              <div className="file-card">
-                <span className="file-card-ext">PDF</span>
-                <p className="file-card-name">IA</p>
-                <div className="file-card-bar"></div>
-              </div>
+              <div className="article-list">
+                <div className="article-row active">
+                  <span className="pdf-icon">PDF</span>
+                  <div>
+                    <strong>Machine Learning in Medicine</strong>
+                    <p>Área: Ciencias de la Salud · Subárea: IA Médica</p>
+                  </div>
+                  <i className="bi bi-check-circle-fill"></i>
+                </div>
 
+                <div className="article-row">
+                  <span className="pdf-icon">PDF</span>
+                  <div>
+                    <strong>Quantum Computing Review</strong>
+                    <p>Área: Ciencias Exactas · Subárea: Computación</p>
+                  </div>
+                  <i className="bi bi-hourglass-split"></i>
+                </div>
+
+                <div className="article-row">
+                  <span className="pdf-icon">PDF</span>
+                  <div>
+                    <strong>Digital Archives & Knowledge</strong>
+                    <p>Área: Humanidades · Subárea: Gestión Documental</p>
+                  </div>
+                  <i className="bi bi-check-circle-fill"></i>
+                </div>
+              </div>
             </div>
 
-          </div>
+            <div className="floating-card categories-card">
+              <span>Áreas detectadas</span>
+              <strong>12+</strong>
+              <div className="category-bars">
+                <i></i><i></i><i></i>
+              </div>
+            </div>
 
+            <div className="floating-card privacy-card">
+              <i className="bi bi-lock-fill"></i>
+              <span>Repositorio seguro</span>
+            </div>
+          </div>
         </section>
 
-        {/* STATS */}
-        <div className="stats-strip">
-
-          <div className="stat-item">
-            <span className="stat-num">
-              500<span>+</span>
-            </span>
-            <span className="stat-label">Archivos almacenados</span>
+        <section className="stats-section">
+          <div className="stat-card">
+            <strong>500+</strong>
+            <span>Archivos organizados</span>
           </div>
-
-          <div className="stat-item">
-            <span className="stat-num">
-              12<span>+</span>
-            </span>
-            <span className="stat-label">Áreas de Clasificación</span>
+          <div className="stat-card">
+            <strong>12+</strong>
+            <span>Áreas de clasificación</span>
           </div>
-
-          <div className="stat-item">
-            <span className="stat-num">
-              0.3<span>s</span>
-            </span>
-            <span className="stat-label">Tiempo de Análisis</span>
+          <div className="stat-card">
+            <strong>0.3s</strong>
+            <span>Tiempo estimado de análisis</span>
           </div>
-
-          <div className="stat-item">
-            <span className="stat-num">
-              100<span>%</span>
-            </span>
-            <span className="stat-label">Privacidad Local</span>
+          <div className="stat-card">
+            <strong>3+</strong>
+            <span>Servicios distribuidos</span>
           </div>
+        </section>
 
-        </div>
-
-        {/* FEATURES */}
-        <section className="features" id="features">
-
-          <div className="section-header">
-
-            <div>
-              <p className="section-label">
-                // 01 — Capacidades
-              </p>
-
-              <h2>Todo lo que Necesitas</h2>
-            </div>
-
+        <section className="features-section" id="features">
+          <div className="section-heading">
+            <p>Funciones principales</p>
+            <h2>Una plataforma para ordenar investigación, no solo guardar archivos.</h2>
           </div>
 
           <div className="features-grid">
-
-            <div className="feature-item">
-              <span className="feature-icon">
-                <i className="bi bi-file-earmark-pdf"></i>
-              </span>
-
-              <h3 className="feature-title">
-                Formato PDF
-              </h3>
-
-              <p className="feature-desc">
-                Soporte para archivos PDF
-              </p>
-            </div>
-
-            <div className="feature-item">
-              <span className="feature-icon">
-                <i className="bi bi-folder-symlink"></i>
-              </span>
-
-              <h3 className="feature-title">
-                Clasificación Inteligente
-              </h3>
-
-              <p className="feature-desc">
-                Detecta áreas (Ciencias exactas, Ciencias Sociales,
-                Literatura, etc.) y sub-áreas (Computación, Filosofía,
-                Astrofísica).
-              </p>
-            </div>
-
-            <div className="feature-item">
-              <span className="feature-icon">
-                <i className="bi bi-search-heart"></i>
-              </span>
-
-              <h3 className="feature-title">
-                Análisis Detallado
-              </h3>
-
-              <p className="feature-desc">
-                Extrae metadatos: tamaño, tema y fecha de modificación
-                de cada archivo.
-              </p>
-            </div>
-
-            <div className="feature-item">
-              <span className="feature-icon">
-                <i className="bi bi-lightning-charge"></i>
-              </span>
-
-              <h3 className="feature-title">
-                Procesamiento Rápido
-              </h3>
-
-              <p className="feature-desc">
-                Analiza múltiples archivos en paralelo con progreso
-                en tiempo real.
-              </p>
-            </div>
-
-            <div className="feature-item">
-              <span className="feature-icon">
-                <i className="bi bi-lock"></i>
-              </span>
-
-              <h3 className="feature-title">
-                Autenticación Segura
-              </h3>
-
-              <p className="feature-desc">
-                Sistema de registro e inicio de sesión con validación
-                en tiempo real y sesiones persistentes.
-              </p>
-            </div>
-
-            <div className="feature-item">
-              <span className="feature-icon">
-                <i className="bi bi-bar-chart"></i>
-              </span>
-
-              <h3 className="feature-title">
-                Vista de Tablero
-              </h3>
-
-              <p className="feature-desc">
-                Visualiza tus archivos organizados en tarjetas con
-                filtros y estadísticas por categoría.
-              </p>
-            </div>
-
+            {features.map((feature) => (
+              <article className="feature-card" key={feature.title}>
+                <div className="feature-icon">
+                  <i className={`bi ${feature.icon}`}></i>
+                </div>
+                <h3>{feature.title}</h3>
+                <p>{feature.text}</p>
+              </article>
+            ))}
           </div>
-
         </section>
 
-        {/* CTA */}
-        <div className="cta-section" id="about">
 
-          <div>
-            <p
-              className="section-label"
-              style={{ color: 'var(--accent)' }}
-            >
-              // Únete Ahora
-            </p>
+        <section className="distributed-section" id="distributed">
+          <div className="section-heading distributed-heading">
+            <p>Características de sistema distribuido</p>
+            <h2>Scidist-Archive no solo clasifica archivos: modela una arquitectura distribuida.</h2>
+          </div>
 
-            <h2>Empieza a Clasificar Hoy</h2>
+          <div className="distributed-layout">
+            <div className="distributed-map" aria-label="Diagrama conceptual de arquitectura distribuida">
+              <div className="node-card client-node">
+                <i className="bi bi-window-sidebar"></i>
+                <span>Cliente Web</span>
+              </div>
 
+              <div className="node-line"></div>
+
+              <div className="node-card gateway-node">
+                <i className="bi bi-diagram-3"></i>
+                <span>Gateway / API</span>
+              </div>
+
+              <div className="node-cluster">
+                <div className="node-card service-node">
+                  <i className="bi bi-person-lock"></i>
+                  <span>Autenticación</span>
+                </div>
+                <div className="node-card service-node">
+                  <i className="bi bi-cpu"></i>
+                  <span>Clasificador</span>
+                </div>
+                <div className="node-card service-node">
+                  <i className="bi bi-database"></i>
+                  <span>Almacenamiento</span>
+                </div>
+              </div>
+
+              <div className="replica-row">
+                <span>Nodo A</span>
+                <span>Nodo B</span>
+                <span>Nodo C</span>
+              </div>
+            </div>
+
+            <div className="distributed-grid">
+              {distributedFeatures.map((item) => (
+                <article className="distributed-card" key={item.title}>
+                  <div className="distributed-icon">
+                    <i className={`bi ${item.icon}`}></i>
+                  </div>
+                  <h3>{item.title}</h3>
+                  <p>{item.text}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="process-section" id="process">
+          <div className="process-copy">
+            <p className="section-kicker">Flujo de trabajo</p>
+            <h2>Del PDF desordenado a una biblioteca científica consultable.</h2>
             <p>
-              Crea tu cuenta gratis y descubre cómo Scidist-Archive
-              transforma el caos de archivos en orden perfecto.
+              La idea de Scidist-Archive es reducir el tiempo que pierdes buscando documentos. Como sistema distribuido, separa responsabilidades entre cliente, servicios de análisis, autenticación y almacenamiento para convertir tus artículos en registros organizados y consultables.
             </p>
           </div>
 
-          <div>
-            <a href="/auth" className="btn-cta">
-              Crear Cuenta Gratis
-            </a>
+          <div className="process-steps">
+            {steps.map((step, index) => (
+              <div className="process-step" key={step}>
+                <span>{String(index + 1).padStart(2, '0')}</span>
+                <p>{step}</p>
+              </div>
+            ))}
           </div>
+        </section>
 
-        </div>
-
+        <section className="cta-section" id="about">
+          <div>
+            <p className="section-kicker">Scidist-Archive</p>
+            <h2>Construye tu archivo científico inteligente.</h2>
+            <p>
+              Ideal para estudiantes, investigadores y equipos académicos que necesitan clasificar artículos, mantener orden documental y comprender una arquitectura con transparencia, concurrencia, tolerancia a fallos y servicios distribuidos.
+            </p>
+          </div>
+          <a href="/auth" className="cta-button">
+            Crear cuenta gratis
+            <i className="bi bi-arrow-up-right"></i>
+          </a>
+        </section>
       </main>
 
-      {/* FOOTER */}
-      <footer className="text-center py-3 mt-5">
-
-        <div className="footer-logo">
-          Scidist-Archive
-        </div>
-
-        <p className="footer-note">
-          © 2026 Scidist-Archive — Clasificador Inteligente de Archivos
-        </p>
-
+      <footer className="footer-section">
+        <div className="footer-logo">Scidist<span>-Archive</span></div>
+        <p>© 2026 Scidist-Archive — Clasificador inteligente de artículos científicos.</p>
       </footer>
-
     </div>
   );
 }
