@@ -229,19 +229,19 @@ function Scidist() {
         </section>
 
         <section className="stats-section">
-          <div className="stat-card">
+          <div className="stat-card new-card">
             <strong>500+</strong>
             <span>Archivos organizados</span>
           </div>
-          <div className="stat-card">
+          <div className="stat-card new-card">
             <strong>12+</strong>
             <span>Áreas de clasificación</span>
           </div>
-          <div className="stat-card">
+          <div className="stat-card new-card">
             <strong>0.3s</strong>
             <span>Tiempo estimado de análisis</span>
           </div>
-          <div className="stat-card">
+          <div className="stat-card new-card">
             <strong>3+</strong>
             <span>Servicios distribuidos</span>
           </div>

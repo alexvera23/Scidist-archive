@@ -513,9 +513,9 @@ body::before {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 1rem;
-}
+} 
 
-.stat-card {
+.new-card {
   padding: 1.35rem;
   border: 1px solid var(--line);
   border-radius: 24px;
@@ -523,7 +523,7 @@ body::before {
   backdrop-filter: blur(14px);
 }
 
-.stat-card strong {
+ .new-card strong {
   display: block;
   margin-bottom: 0.25rem;
   color: var(--ink);
@@ -533,7 +533,7 @@ body::before {
   letter-spacing: -0.04em;
 }
 
-.stat-card span {
+.new-card span {
   color: var(--muted);
   font-size: 0.84rem;
   font-weight: 700;
@@ -953,7 +953,7 @@ body::before {
 
 .hero-content > *,
 .hero-dashboard,
-.stat-card,
+.new-card,
 .feature-card,
 .distributed-section,
 .process-section,

@@ -241,6 +241,7 @@ app.post('/api/v1/upload', upload.single('file'), async (req, res) => {
       const finalReplicas = candidateNodes
         .map(n => n.node_id)
         .filter(id => id !== successfulNode.node_id);
+        const fileSizeInBytes = fileBuffer.length;
 
       const metadataPayload = {
         file_hash: fileHash,
@@ -249,7 +250,8 @@ app.post('/api/v1/upload', upload.single('file'), async (req, res) => {
         theme_id: finalThemeId,        
         subtheme_id: finalSubthemeId,  
         node_id: successfulNode.node_id, 
-        replicas: finalReplicas 
+        replicas: finalReplicas,
+        size: fileSizeInBytes
       };
 
       await axios.post('http://metadata-service:3001/api/v1/articles', metadataPayload);
