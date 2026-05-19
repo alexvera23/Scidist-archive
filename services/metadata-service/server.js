@@ -12,7 +12,7 @@ const CATALOGO_CATEGORIAS = [
   { id: 'ia', name: 'Inteligencia Artificial', subthemes: ['Machine Learning', 'Deep Learning', 'NLP'] },
   { id: 'dev', name: 'Desarrollo de Software', subthemes: ['Frontend', 'Backend', 'Arquitectura'] },
   { id: 'linux', name: 'Linux', subthemes: ['Arch Linux', 'Ubuntu', 'Fedora'] },
-  { id: 'General', name: 'General', subthemes: ['General']}
+  { id: 'Salud', name: 'Salud', subthemes: ['Medicina', 'Enfermeria', 'Odontologia']}
 ];
 
 const app = express();
