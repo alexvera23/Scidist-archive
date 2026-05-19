@@ -38,7 +38,7 @@ body {
     radial-gradient(circle at 86% 18%, rgba(41, 59, 120, 0.13), transparent 30%),
     linear-gradient(135deg, var(--bg) 0%, #fbf8f1 48%, #f0e8dc 100%);
   color: var(--ink);
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'DM Sans', sans-serif;
 }
 
 body::before {
