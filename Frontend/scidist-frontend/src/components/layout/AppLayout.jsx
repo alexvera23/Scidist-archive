@@ -87,14 +87,14 @@ export default function AppLayout({ children, onSelectCategory, categoryCounts =
           </div>
 
           <div className="d-flex align-items-center gap-3">
-            <Form className="d-none d-lg-flex" role="search">
+            {/* <Form className="d-none d-lg-flex" role="search">
               <InputGroup>
                 <InputGroup.Text className="bg-transparent border-end-0">
                   <i className="bi bi-search"></i>
                 </InputGroup.Text>
                 <Form.Control type="search" placeholder="Buscar archivos..." className="border-start-0" />
               </InputGroup>
-            </Form>
+            </Form> */}
             
             {/* Saludo al usuario activo */}
             {userData && (
