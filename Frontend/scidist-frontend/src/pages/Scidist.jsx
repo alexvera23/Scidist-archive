@@ -55,9 +55,9 @@ const distributedFeatures = [
     text: 'El diseño puede contemplar copias de seguridad o nodos espejo para mantener disponibilidad de archivos y metadatos ante fallos.'
   },
   {
-    icon: 'bi-arrow-repeat',
-    title: 'Concurrencia controlada',
-    text: 'Varios usuarios pueden subir, consultar o clasificar documentos al mismo tiempo sin afectar la consistencia del repositorio.'
+    icon: 'bi bi-router',
+    title: 'Tailscale VPN',
+    text: 'Toda la comunicación interna entre contenedores Docker y máquinas físicas está securizada y unificada mediante Tailscale VPN, creando una red privada virtual (Mesh) de confianza cero sin exponer puertos públicos.'
   },
   {
     icon: 'bi-wifi',
@@ -68,6 +68,16 @@ const distributedFeatures = [
     icon: 'bi-shield-exclamation',
     title: 'Tolerancia a fallos',
     text: 'Si un proceso de análisis falla, el sistema puede conservar el archivo, marcar su estado y permitir reintentar la clasificación sin perder datos.'
+  },
+  {
+    icon: 'bi bi-diagram-2',
+    title: 'Microservicios & gRPC',
+    text : 'El API Gateway orquesta las peticiones hacia el Metadata Service(Node.js/Express). Las transferencias físicas de los PDFs se realizan mediante flujos binarios de alta velocidad utilizando el protocolo gRPC.'
+  },
+  {
+    icon: 'bi bi-hdd-network',
+    title: 'P2P & MongoDB',
+    text: 'Los archivos se distribuyen dinámicamente entre nodos heterogéneos (Fedora Linux y Windows) mediante un sistema de latidos (Heartbeats) y replicación. Los metadatos están resguardados en un Replica Set de MongoDB'
   }
 ];
 
