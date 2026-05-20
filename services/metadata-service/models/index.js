@@ -32,6 +32,7 @@ const ArticleSchema = new mongoose.Schema({
   owner_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }, // ¡El dueño!
   theme_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Theme' },       // Clasificación Nivel 1
   subtheme_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Subtheme' }, // Clasificación Nivel 2 (Opcional)
+  size: {type: Number, default: 0 },
   status: { type: String, enum: ['uploading', 'available', 'deleted', 'error'], default: 'available' }
 }, { timestamps: true });
 

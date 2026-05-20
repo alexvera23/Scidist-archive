@@ -187,6 +187,11 @@ const handleCloseModal = () => {
   }
 };
 
+const handleCloseModal2 = () => {
+  setShowCatModal(false);
+};
+
+
 // Función para Descargar el archivo físicamente
   const handleDownloadFile = async (file) => {
     const storedUser = JSON.parse(localStorage.getItem('user'));
@@ -656,6 +661,11 @@ const handleCloseModal = () => {
             </div>
           )}
         </Modal.Body>
+         <Modal.Footer className="border-secondary bg-dark">
+            <Button variant="outline" onClick={handleCloseModal2} className="rounded-pill px-4 cerrar">
+              Cerrar
+            </Button>
+          </Modal.Footer>
       </Modal>
 
     </AppLayout>

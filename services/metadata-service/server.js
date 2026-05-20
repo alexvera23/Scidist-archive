@@ -12,7 +12,7 @@ const CATALOGO_CATEGORIAS = [
   { id: 'ia', name: 'Inteligencia Artificial', subthemes: ['Machine Learning', 'Deep Learning', 'NLP'] },
   { id: 'dev', name: 'Desarrollo de Software', subthemes: ['Frontend', 'Backend', 'Arquitectura'] },
   { id: 'linux', name: 'Linux', subthemes: ['Arch Linux', 'Ubuntu', 'Fedora'] },
-  { id: 'General', name: 'General', subthemes: ['General']}
+  { id: 'Salud', name: 'Salud', subthemes: ['Medicina', 'Enfermeria', 'Odontologia']}
 ];
 
 const app = express();
@@ -171,7 +171,7 @@ app.get('/api/v1/users/:id/categories', async (req, res) => {
 // Guardar Metadatos del Artículo (Actualizado con Temas)
 app.post('/api/v1/articles', async (req, res) => {
   // Ahora esperamos el owner_id y los temas desde el Gateway
-  const { file_hash, title, owner_id, theme_id, subtheme_id, node_id, replicas } = req.body; 
+  const { file_hash, title, owner_id, theme_id, subtheme_id, node_id, replicas, size } = req.body; 
 
   if (!file_hash || !title || !owner_id || !node_id) {
     return res.status(400).json({ error: 'Faltan campos obligatorios' });
@@ -186,7 +186,8 @@ app.post('/api/v1/articles', async (req, res) => {
       title, 
       owner_id, 
       theme_id, 
-      subtheme_id, 
+      subtheme_id,
+      size: size || 0, 
       status: 'available' 
     });
     await newArticle.save({ session });
@@ -491,7 +492,7 @@ app.get('/api/v1/files/user/:owner_id', async (req, res) => {
     const formattedFiles = articles.map(article => ({
       id: article._id,
       name: article.title || article.file_hash, // Usamos title, o el hash como respaldo
-      size: 0, //  Tu esquema no guarda el tamaño en bytes. Mandamos 0 por defecto para que no falle el frontend.
+      size: article.size || 0, //  Tu esquema no guarda el tamaño en bytes. Mandamos 0 por defecto para que no falle el frontend.
       date: article.createdAt, // Lo provee el { timestamps: true } de tu esquema
       category: article.theme_id?.name || 'General',
       subcategory: article.subtheme_id?.name || 'Otros',
