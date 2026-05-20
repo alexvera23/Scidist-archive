@@ -65,7 +65,7 @@ body::before {
 
 .brand-logo {
   color: var(--ink) !important;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: 'DM Sans', sans-serif;
   font-size: clamp(1.15rem, 2vw, 1.55rem);
   font-weight: 800;
   letter-spacing: -0.04em;
@@ -155,7 +155,7 @@ body::before {
 .section-heading h2,
 .process-copy h2,
 .cta-section h2 {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: 'DM Sans', sans-serif;
   color: var(--ink);
   font-weight: 800;
   letter-spacing: -0.065em;
@@ -250,7 +250,7 @@ body::before {
 .hero-trust strong {
   display: block;
   color: var(--ink);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: 'DM Sans', sans-serif;
   font-size: 1.25rem;
 }
 
@@ -324,7 +324,7 @@ body::before {
 .dashboard-topbar h3 {
   margin: 0;
   color: var(--ink);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: 'DM Sans', sans-serif;
   font-size: 1.75rem;
   font-weight: 800;
   letter-spacing: -0.04em;
@@ -467,7 +467,7 @@ body::before {
   display: block;
   margin: 0.2rem 0 0.75rem;
   color: var(--ink);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: 'DM Sans', sans-serif;
   font-size: 2.2rem;
   line-height: 1;
 }
@@ -527,7 +527,7 @@ body::before {
   display: block;
   margin-bottom: 0.25rem;
   color: var(--ink);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: 'DM Sans', sans-serif;
   font-size: clamp(1.7rem, 3vw, 2.55rem);
   line-height: 1;
   letter-spacing: -0.04em;
@@ -883,7 +883,7 @@ body::before {
   right: -1rem;
   bottom: -3.4rem;
   color: rgba(255, 255, 255, 0.035);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: 'DM Sans', sans-serif;
   font-size: clamp(6rem, 16vw, 13rem);
   font-weight: 900;
   letter-spacing: -0.08em;
@@ -929,7 +929,7 @@ body::before {
 
 .footer-logo {
   color: var(--ink);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: 'DM Sans', sans-serif;
   font-weight: 900;
   letter-spacing: -0.04em;
 }

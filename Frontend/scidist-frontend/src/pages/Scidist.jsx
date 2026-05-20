@@ -248,7 +248,7 @@ function Scidist() {
             <span>Áreas de clasificación</span>
           </div>
           <div className="stat-card new-card">
-            <strong>0.3s</strong>
+            <strong>1-3 minutos</strong>
             <span>Tiempo estimado de análisis</span>
           </div>
           <div className="stat-card new-card">
